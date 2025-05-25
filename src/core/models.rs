@@ -1,32 +1,31 @@
+//! Data structures returned by Jenkins APIs.
+
 use serde::{Deserialize, Serialize};
 
-/// Represents a Jenkins job.
+/// A Jenkins job entry in `GET /api/json`.
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Job {
-    /// Name of the job.
     pub name: String,
-    /// URL to access the job.
     pub url: String,
-    /// Status color of the job (e.g., blue, red, yellow).
     pub color: String,
 }
 
-/// Information about Jenkins executors.
+/// Executor statistics from `GET /computer/api/json`.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ExecutorsInfo {
-    /// Total number of executors available.
     pub total_executors: u32,
-    /// Number of currently busy executors.
     pub busy_executors: u32,
-    /// Calculated number of idle executors (not directly provided by Jenkins).
     #[serde(skip)]
     pub idle_executors: u32,
 }
 
 impl ExecutorsInfo {
-    /// Calculates the number of idle executors.
-    pub fn calculate_idle(&mut self) {
+    /// Populate `idle_executors`.
+    pub fn calc_idle(mut self) -> Self {
         self.idle_executors = self.total_executors - self.busy_executors;
+        self
     }
 }

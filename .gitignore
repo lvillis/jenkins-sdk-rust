@@ -9,3 +9,5 @@ logs/
 **/*.rs.bk
 
 Cargo.lock
+CONTEXT.md
+.aiignore

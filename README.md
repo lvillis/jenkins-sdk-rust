@@ -24,29 +24,35 @@
 
 ---
 
-**jenkins-sdk-rust** is an ergonomic Rust SDK designed for interacting seamlessly with Jenkins APIs. Inspired by popular Rust SDKs such as the GitLab SDK, it provides a structured, idiomatic Rust API with support for both synchronous and asynchronous requests.
+`jenkins-sdk-rust` provides a modern, ergonomic interface for talking to Jenkins—from tiny CLI utilities to production
+services.  
+The crate ships **both asynchronous (Tokio) _and_ blocking** clients, exposes each REST endpoint as a strongly-typed
+value, and offers a chainable builder with ready-made middleware such as **automatic CSRF-crumb fetching** and *
+*exponential back-off retries**.
 
 ## ✨ Features
 
-- **Async & Sync Clients**: Support for both synchronous and asynchronous workflows using Tokio and Reqwest.
-- **Idiomatic Rust Interface**: Designed with clear traits and endpoint structures following Rust best practices.
-- **Flexible Response Handling**: Built-in support for JSON deserialization and raw text responses.
-- **Robust Error Handling**: Comprehensive error management with clear, descriptive error messages.
-- **Comprehensive Documentation**: Rich documentation compatible with `cargo doc`.
+* **Async & Blocking** – pick the I/O model that fits your project at _compile time_. The default feature set builds the
+  async client; enable `blocking-client` when you need synchronous calls.
+* **Type-safe endpoints** – each API call is represented by a zero-cost struct implementing `Endpoint`; responses
+  deserialize into concrete Rust types.
+* **Composable middleware** – add automatic retries, CSRF crumbs, custom transports, or roll your own.
+* **No magic strings** – URL construction, query/form encoding, error mapping, and JSON decoding are handled for you.
+* **Pure Rust, small deps** – built on [`reqwest`](https://crates.io/crates/reqwest) with `rustls` TLS by default.
 
 ## 🚀 Supported API Endpoints
 
 - **Job Management**
-  - [x] Retrieve jobs information
-  - [x] Fetch console logs
-  - [x] Trigger builds with parameters
-  - [x] Stop ongoing builds
+    - [x] Retrieve jobs information
+    - [x] Fetch console logs
+    - [x] Trigger builds with parameters
+    - [x] Stop ongoing builds
 
 - **Queue Management**
-  - [x] Retrieve build queue details
+    - [x] Retrieve build queue details
 
 - **Executor Management**
-  - [x] Retrieve executor statistics and status
+    - [x] Retrieve executor statistics and status
 
 ## 📥 Installation
 
@@ -60,19 +66,36 @@ jenkins-sdk = "0.1"
 ## ⚡Quick Start
 
 ### Async Example
+
 ```rust
-use jenkins_sdk::{JenkinsAsyncClient, AsyncQuery, JobsInfo};
-use tokio;
+use jenkins_sdk::{JenkinsAsync};
+use jenkins_sdk::core::{QueueLength, JobsInfo, ExecutorsInfoEndpoint};
+use std::time::Duration;
 
 #[tokio::main]
-async fn main() -> Result<(), jenkins_sdk::JenkinsError> {
-  let client = JenkinsAsyncClient::new("https://jenkins.example.com", "username", "api_token");
+async fn main() -> Result<(), jenkins_sdk::core::JenkinsError> {
+    // Build a client with some sugar ‑‑>
+    let j = JenkinsAsync::builder("https://jenkins.example.com")
+        .auth_basic("user", "apitoken")
+        .no_system_proxy()
+        .with_retry(3, Duration::from_millis(300))
+        .with_crumb(Duration::from_secs(1800))
+        .build();
 
-  // Retrieve job information
-  let jobs: serde_json::Value = AsyncQuery::query(&JobsInfo, &client).await?;
-  println!("Jobs: {:?}", jobs);
+    // Queue length
+    let q: serde_json::Value = j.request(&QueueLength).await?;
+    println!("queue items = {}", q["items"].as_array().map_or(0, |a| a.len()));
 
-  Ok(())
+    // Executor stats (typed deserialisation)
+    let mut ex = j.request(&ExecutorsInfoEndpoint).await?;
+    ex = ex.calc_idle();
+    println!("idle executors = {}", ex.idle_executors);
+
+    // Raw job list
+    let jobs: serde_json::Value = j.request(&JobsInfo).await?;
+    println!("first job = {}", jobs["jobs"][0]["name"]);
+
+    Ok(())
 }
 
 ```
@@ -80,15 +103,20 @@ async fn main() -> Result<(), jenkins_sdk::JenkinsError> {
 ### Sync Example
 
 ```rust
-use jenkins_sdk::{JenkinsSyncClient, Query, JobsInfo};
+// Compile with `default-features = false, features = ["blocking-client"]`.
+use jenkins_sdk::{JenkinsBlocking};
+use jenkins_sdk::core::QueueLength;
+use std::time::Duration;
 
-fn main() -> Result<(), jenkins_sdk::JenkinsError> {
-    let client = JenkinsSyncClient::new("https://jenkins.example.com", "username", "api_token");
+fn main() -> Result<(), jenkins_sdk::core::JenkinsError> {
+    let j = JenkinsBlocking::builder("https://jenkins.example.com")
+        .auth_basic("user", "apitoken")
+        .timeout(Duration::from_secs(15))
+        .with_retry(2, Duration::from_millis(250))
+        .build();
 
-    // Retrieve job information
-    let jobs: serde_json::Value = Query::query(&JobsInfo, &client)?;
-    println!("Jobs: {:?}", jobs);
-
+    let q: serde_json::Value = j.request(&QueueLength)?;
+    println!("queue items = {}", q["items"].as_array().unwrap().len());
     Ok(())
 }
 ```
