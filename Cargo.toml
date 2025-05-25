@@ -42,6 +42,16 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 [dev-dependencies]
 anyhow = { version = "1.0.98" }
 
+[[example]]
+name = "async_test"
+path = "examples/async_test.rs"
+required-features = ["async-client"]
+
+[[example]]
+name = "sync_test"
+path = "examples/sync_test.rs"
+required-features = ["blocking-client"]
+
 [package.metadata.release]
 tag-prefix = ""
 tag-name = "{{prefix}}{{version}}"
