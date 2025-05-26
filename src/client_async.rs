@@ -17,7 +17,7 @@ use url::Url;
 
 /// Builder for [`JenkinsAsync`].
 ///
-/// *Do not construct directly; use* `JenkinsAsync::builder(..)` *instead.*
+/// *Do not construct directly; call* `JenkinsAsync::builder(..)` *instead.*
 pub struct JenkinsAsyncBuilder<T = DefaultAsyncTransport> {
     base_url: String,
     auth: Option<(String, String)>,
@@ -27,9 +27,9 @@ pub struct JenkinsAsyncBuilder<T = DefaultAsyncTransport> {
     transport: T,
 }
 
-/* ───────────── internal constructor ───────────── */
+/* ───────────── impl for DefaultAsyncTransport ───────────── */
 impl JenkinsAsyncBuilder<DefaultAsyncTransport> {
-    /// Internal helper used by `JenkinsAsync::builder`.
+    /// Create a builder with default settings.
     fn default_builder(base: impl Into<String>) -> Self {
         Self {
             base_url: base.into(),
@@ -46,32 +46,47 @@ impl JenkinsAsyncBuilder<DefaultAsyncTransport> {
         }
     }
 
-    /// Ignore proxy environment variables.
+    /// Rebuild the internal default transport after flag changes.
+    fn refresh_transport(&mut self) {
+        self.transport = DefaultAsyncTransport::new(
+            self.insecure,
+            "jenkins-sdk-rust",
+            self.timeout,
+            self.no_proxy,
+        );
+    }
+
+    /// Ignore system proxy environment variables.
     pub fn no_system_proxy(mut self) -> Self {
         self.no_proxy = true;
-        self.transport =
-            DefaultAsyncTransport::new(self.insecure, "jenkins-sdk-rust", self.timeout, true);
+        self.refresh_transport();
+        self
+    }
+
+    /// Accept invalid TLS certificates (**dangerous**).
+    pub fn danger_accept_invalid_certs(mut self, yes: bool) -> Self {
+        self.insecure = yes;
+        self.refresh_transport();
+        self
+    }
+
+    /// Set the per-request timeout.
+    pub fn timeout(mut self, t: Duration) -> Self {
+        self.timeout = t;
+        self.refresh_transport();
         self
     }
 }
 
-/* ───────────── generic part ───────────── */
+/* ───────────── generic impl (any transport) ───────────── */
 impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
-    /* setters */
+    /* setters that do not require rebuilding default transport */
     pub fn auth_basic(mut self, user: impl Into<String>, token: impl Into<String>) -> Self {
         self.auth = Some((user.into(), token.into()));
         self
     }
-    pub fn danger_accept_invalid_certs(mut self, yes: bool) -> Self {
-        self.insecure = yes;
-        self
-    }
-    pub fn timeout(mut self, t: Duration) -> Self {
-        self.timeout = t;
-        self
-    }
 
-    /// Replace the current transport instance.
+    /// Swap out the underlying transport.
     pub fn transport<NT: AsyncTransport>(self, t: NT) -> JenkinsAsyncBuilder<NT> {
         JenkinsAsyncBuilder {
             base_url: self.base_url,
@@ -83,7 +98,7 @@ impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
         }
     }
 
-    /* sugar */
+    /* sugar layers */
     pub fn with_retry(self, max: usize, backoff: Duration) -> JenkinsAsyncBuilder<Retry<T>> {
         let JenkinsAsyncBuilder {
             base_url,
@@ -126,7 +141,7 @@ impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
         }
     }
 
-    /// Finalize the builder and create a client.
+    /// Finalize the builder and create the client.
     pub fn build(self) -> JenkinsAsync<T> {
         JenkinsAsync {
             base: Url::parse(&self.base_url).expect("valid URL"),
@@ -153,7 +168,7 @@ impl JenkinsAsync<DefaultAsyncTransport> {
         JenkinsAsyncBuilder::default_builder(base)
     }
 
-    /// Build a client with all default settings (quick path).
+    /// Quick path: all default settings.
     #[must_use]
     pub fn new(base: impl Into<String>) -> Self {
         Self::builder(base).build()
@@ -186,20 +201,20 @@ impl<T: AsyncTransport> JenkinsAsync<T> {
         };
         let (query, form) = (Self::own_pairs(q_raw), Self::own_pairs(f_raw));
 
+        let url = self.base.join(&ep.path())?;
+
         let (code, body) = self
             .transport
-            .send(
-                ep.method(),
-                self.base.join(&ep.path())?,
-                hdr,
-                query,
-                form,
-                self.timeout,
-            )
+            .send(ep.method(), url.clone(), hdr, query, form, self.timeout)
             .await?;
 
         if !code.is_success() {
-            return Err(JenkinsError::Http { code, body });
+            return Err(JenkinsError::Http {
+                code,
+                method: ep.method(),
+                url,
+                body,
+            });
         }
 
         /* decode */

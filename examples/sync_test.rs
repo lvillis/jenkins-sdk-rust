@@ -58,6 +58,13 @@ fn main() -> anyhow::Result<()> {
     })?;
     println!("Triggered build with params {params}");
 
+    // Stop build #91 in the "core" job
+    let resp: String = client.request(&StopBuild {
+        job: "core",
+        build: "91",
+    })?;
+    println!("StopBuild response: {resp}");
+
     Ok(())
 }
 

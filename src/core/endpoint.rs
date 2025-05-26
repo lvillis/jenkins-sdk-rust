@@ -90,3 +90,23 @@ impl<'a> Endpoint for TriggerBuild<'a> {
         })
     }
 }
+
+/// POST /job/<name>/<build>/stop
+pub struct StopBuild<'a> {
+    /// Job name.
+    pub job: &'a str,
+    /// Build number.
+    pub build: &'a str,
+}
+
+impl<'a> Endpoint for StopBuild<'a> {
+    type Output = String;
+
+    fn method(&self) -> Method {
+        Method::POST
+    }
+
+    fn path(&self) -> Cow<'static, str> {
+        Cow::Owned(format!("job/{}/{}/stop", self.job, self.build))
+    }
+}

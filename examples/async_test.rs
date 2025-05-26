@@ -3,7 +3,7 @@
 //! 4. console text   5. trigger build
 
 use jenkins_sdk::{
-    JenkinsAsync,
+    JenkinsAsync, StopBuild,
     core::{
         ConsoleText, ExecutorsInfo, ExecutorsInfoEndpoint, JobsInfo, QueueLength, TriggerBuild,
     },
@@ -54,6 +54,15 @@ async fn main() -> anyhow::Result<()> {
         })
         .await?;
     println!("Triggered build with params {params}");
+
+    // Stop build #91 in the "core" job
+    let resp: String = client
+        .request(&StopBuild {
+            job: "core",
+            build: "91",
+        })
+        .await?;
+    println!("StopBuild response: {resp}");
 
     Ok(())
 }
