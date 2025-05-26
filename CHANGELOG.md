@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.8] - 2025-05-26
+
+### 🚀 Features
+
+- Switch to exponential back-off
+- Add method/url context
+- Add StopBuild
+
 ## [0.1.7] - 2025-05-25
 
 ### 🐛 Bug Fixes
 
 - Ci
+
+### ⚙️ Miscellaneous Tasks
+
+- Release jenkins-sdk version 0.1.7
 
 ## [0.1.6] - 2025-05-25
 
