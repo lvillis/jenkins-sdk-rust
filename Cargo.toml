@@ -7,7 +7,8 @@ license = "MIT"
 authors = ["lvillis<lvillis@outlook.com>"]
 repository = "https://github.com/lvillis/jenkins-sdk-rust"
 homepage = "https://github.com/lvillis/jenkins-sdk-rust"
-documentation = "https://github.com/lvillis/jenkins-sdk-rust/blob/main/README.md"
+documentation = "https://github.com/lvillis/jenkins-sdk-rust#readme"
+
 exclude = [
     "/docs/",
     "/tests/",
@@ -16,6 +17,7 @@ exclude = [
     "/.justfile",
     "/rust-toolchain.toml",
     "/.gitignore",
+    "/.aiignore"
 ]
 
 

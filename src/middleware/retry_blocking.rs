@@ -14,6 +14,11 @@ pub struct RetryBlocking<T> {
 }
 
 impl<T> RetryBlocking<T> {
+    /// Create a new retry layer.
+    ///
+    /// * `inner`  – the wrapped transport  
+    /// * `max`    – maximum retry attempts ( ≥ 1 )  
+    /// * `backoff`– initial back-off duration
     pub fn new(inner: T, max: usize, backoff: Duration) -> Self {
         Self {
             inner,
@@ -45,9 +50,13 @@ impl<T: BlockingTransport> BlockingTransport for RetryBlocking<T> {
                 timeout,
             )?;
 
+            // Retry on 5xx up to `max` attempts.
             if code.is_server_error() && attempt < self.max {
                 attempt += 1;
-                let delay = self.backoff.mul_f64(attempt as f64); // <-- fixed
+
+                // Exponential back-off: base * 2^attempt
+                let delay = self.backoff.mul_f64(2f64.powi(attempt as i32)); // e.g. 200 ms → 400 ms → 800 ms …
+
                 thread::sleep(delay);
                 continue;
             }
