@@ -1,7 +1,7 @@
 //! Async CSRF-Crumb middleware.
-//!
-//! * Lazily fetches `/crumbIssuer/api/json` on the **first** non-GET request.  
-//! * Caches the crumb header for `ttl`; subsequent POST/PUT reuse it.  
+//
+//! * Lazily fetches `/crumbIssuer/api/json` on the **first** non-GET request.
+//! * Caches the crumb header for `ttl`; subsequent POST/PUT reuse it.
 //! * Thread-safe via `Arc<RwLock<…>>`.
 
 use crate::{core::error::JenkinsError, transport::async_impl::AsyncTransport};
@@ -62,6 +62,7 @@ impl<T: AsyncTransport> CrumbAsync<T> {
     /// GET `/crumbIssuer/api/json` and return a fresh cache entry.
     async fn fetch_crumb(&self) -> Result<CachedCrumb, JenkinsError> {
         let url = self.base_url.join("crumbIssuer/api/json")?;
+        let url_for_error = url.clone(); // keep a copy for error context
 
         let mut hdrs = HashMap::new();
         if let Some((u, p)) = &self.auth_basic {
@@ -87,7 +88,12 @@ impl<T: AsyncTransport> CrumbAsync<T> {
             .await?;
 
         if !code.is_success() {
-            return Err(JenkinsError::Http { code, body });
+            return Err(JenkinsError::Http {
+                code,
+                method: Method::GET,
+                url: url_for_error,
+                body,
+            });
         }
 
         let json: CrumbResp = serde_json::from_str(&body)?;
@@ -110,7 +116,7 @@ impl<T: AsyncTransport> AsyncTransport for CrumbAsync<T> {
         form: Vec<(String, String)>,
         timeout: Duration,
     ) -> Result<(StatusCode, String), JenkinsError> {
-        // Non-GET calls need a crumb
+        // Non-GET calls need a crumb.
         if method != Method::GET {
             let mut guard = self.cache.write().await;
             let expired = guard

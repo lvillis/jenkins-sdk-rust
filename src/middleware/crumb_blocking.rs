@@ -52,6 +52,7 @@ impl<T: BlockingTransport> CrumbBlocking<T> {
 
     fn fetch_crumb(&self) -> Result<CachedCrumb, JenkinsError> {
         let url = self.base_url.join("crumbIssuer/api/json")?;
+        let url_for_error = url.clone();
 
         let mut hdrs = HashMap::new();
         if let Some((u, p)) = &self.auth_basic {
@@ -74,7 +75,12 @@ impl<T: BlockingTransport> CrumbBlocking<T> {
         )?;
 
         if !code.is_success() {
-            return Err(JenkinsError::Http { code, body });
+            return Err(JenkinsError::Http {
+                code,
+                method: Method::GET,
+                url: url_for_error,
+                body,
+            });
         }
 
         let json: CrumbResp = serde_json::from_str(&body)?;

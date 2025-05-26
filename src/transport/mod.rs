@@ -73,18 +73,29 @@ pub mod async_impl {
         ) -> Result<(StatusCode, String), JenkinsError> {
             let mut req = self
                 .client
-                .request(method, url)
+                .request(method.clone(), url.clone())
                 .query(&query)
                 .timeout(timeout);
-            for (k, v) in headers {
+
+            for (k, v) in &headers {
                 req = req.header(k, v);
             }
             if !form.is_empty() {
                 req = req.form(&form);
             }
-            let resp = req.send().await?;
+
+            let resp = req.send().await.map_err(|e| JenkinsError::Reqwest {
+                source: e,
+                method: method.clone(),
+                url: url.clone(),
+            })?;
+
             let code = resp.status();
-            let body = resp.text().await?;
+            let body = resp.text().await.map_err(|e| JenkinsError::Reqwest {
+                source: e,
+                method: method.clone(),
+                url: url.clone(),
+            })?;
             Ok((code, body))
         }
     }
@@ -150,18 +161,29 @@ pub mod blocking_impl {
         ) -> Result<(StatusCode, String), JenkinsError> {
             let mut req = self
                 .client
-                .request(method, url)
+                .request(method.clone(), url.clone())
                 .query(&query)
                 .timeout(timeout);
-            for (k, v) in headers {
+
+            for (k, v) in &headers {
                 req = req.header(k, v);
             }
             if !form.is_empty() {
                 req = req.form(&form);
             }
-            let resp = req.send()?;
+
+            let resp = req.send().map_err(|e| JenkinsError::Reqwest {
+                source: e,
+                method: method.clone(),
+                url: url.clone(),
+            })?;
+
             let code = resp.status();
-            let body = resp.text()?;
+            let body = resp.text().map_err(|e| JenkinsError::Reqwest {
+                source: e,
+                method,
+                url,
+            })?;
             Ok((code, body))
         }
     }
