@@ -1,21 +1,32 @@
-<div align=right>Table of Contents↗️</div>
+<!-- ─── Language Switch & ToC (top-right) ──────────────────────────── -->
+<div align="right">
 
-<h1 align=center><code>jenkins-sdk-rust</code></h1>
+<span style="color:#999;">🇺🇸 English</span> ·
+<a href="README.zh-CN.md">🇨🇳 中文</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Table&nbsp;of&nbsp;Contents&nbsp;↗️
 
-<p align=center>📦 Jenkins API SDK written in Rust</p>
+</div>
 
-<div align=center>
+<h1 align="center"><code>jenkins-sdk-rust</code></h1>
+
+<p align="center">
+  📦 <strong>Jenkins API SDK in pure Rust</strong> — async <em>and</em> blocking clients, typed endpoints, pluggable middleware &amp; zero magic strings.
+</p>
+
+<div align="center">
   <a href="https://crates.io/crates/jenkins-sdk">
     <img src="https://img.shields.io/crates/v/jenkins-sdk.svg" alt="crates.io version">
   </a>
-  <a href="https://crates.io/crates/jenkins-sdk">
-    <img src="https://img.shields.io/crates/dr/jenkins-sdk?color=ba86eb" alt="crates.io downloads">
-  </a>
-  <a href="https://github.com/lvillis/jenkins-sdk-rust">
-    <img src="https://img.shields.io/github/repo-size/lvillis/jenkins-sdk-rust?style=flat-square&color=328657" alt="repo size">
+  <a href="https://docs.rs/jenkins-sdk">
+    <img src="https://img.shields.io/docsrs/jenkins-sdk?logo=rust" alt="docs.rs docs">
   </a>
   <a href="https://github.com/lvillis/jenkins-sdk-rust/actions">
-    <img src="https://github.com/lvillis/jenkins-sdk-rust/actions/workflows/ci.yaml/badge.svg" alt="build status">
+    <img src="https://github.com/lvillis/jenkins-sdk-rust/actions/workflows/ci.yaml/badge.svg" alt="CI status">
+  </a>
+  <a href="https://img.shields.io/crates/dr/jenkins-sdk?color=ba86eb">
+    <img src="https://img.shields.io/crates/dr/jenkins-sdk?color=ba86eb" alt="downloads">
+  </a>
+  <a href="https://github.com/lvillis/jenkins-sdk-rust">
+    <img src="https://img.shields.io/github/repo-size/lvillis/jenkins-sdk-rust?color=328657&style=flat-square" alt="repo size">
   </a>
   <a href="mailto:lvillis@outlook.com?subject=Thanks%20for%20jenkins-sdk-rust!">
     <img src="https://img.shields.io/badge/Say%20Thanks-!-1EAEDB.svg" alt="say thanks">
@@ -24,46 +35,85 @@
 
 ---
 
-`jenkins-sdk-rust` provides a modern, ergonomic interface for talking to Jenkins—from tiny CLI utilities to production
-services.  
-The crate ships **both asynchronous (Tokio) _and_ blocking** clients, exposes each REST endpoint as a strongly-typed
-value, and offers a chainable builder with ready-made middleware such as **automatic CSRF-crumb fetching** and *
-*exponential back-off retries**.
-
 ## ✨ Features
 
-* **Async & Blocking** – pick the I/O model that fits your project at _compile time_. The default feature set builds the
-  async client; enable `blocking-client` when you need synchronous calls.
-* **Type-safe endpoints** – each API call is represented by a zero-cost struct implementing `Endpoint`; responses
-  deserialize into concrete Rust types.
-* **Composable middleware** – add automatic retries, CSRF crumbs, custom transports, or roll your own.
-* **No magic strings** – URL construction, query/form encoding, error mapping, and JSON decoding are handled for you.
-* **Pure Rust, small deps** – built on [`reqwest`](https://crates.io/crates/reqwest) with `rustls` TLS by default.
+| Feature                   | Description                                                                                              |
+|---------------------------|----------------------------------------------------------------------------------------------------------|
+| **Async *and* Blocking**  | Choose the I/O model at _compile-time_: `tokio` by default, enable `blocking-client` for sync.           |
+| **Type-safe endpoints**   | Each REST call is a zero-cost struct implementing `Endpoint`; responses deserialize into concrete types. |
+| **Composable middleware** | Ready-made CSRF-crumb fetching, retries, custom transports — just chain builders.                        |
+| **No magic strings**      | URL build, query/form encoding, error mapping & JSON decoding handled for you.                           |
+| **Pure Rust, tiny deps**  | Built on <code>reqwest</code> + <code>rustls</code>; no C bindings, minimal footprint.                   |
 
-## 🚀 Supported API Endpoints
+## 🖼 Architecture
 
-- **Job Management**
-    - [x] Retrieve jobs information
-    - [x] Fetch job details
-    - [x] Fetch last-build information
-    - [x] Fetch console logs
-    - [x] Fetch last-build console log
-    - [x] Trigger builds with parameters
-    - [x] Stop ongoing builds
+<details open>
+<summary>Quick-glance architecture (click to collapse)</summary>
 
-- **Queue Management**
-    - [x] Retrieve build queue details
+```mermaid
+flowchart LR
+%% ── Your App ──────────────────────────
+  subgraph A["Your&nbsp;App"]
+    direction TB
+    CLI["Binary / Service"]
+  end
 
-- **Executor Management**
-    - [x] Retrieve executor statistics and status
+%% ── SDK Core ──────────────────────────
+  subgraph S["jenkins-sdk-rust"]
+    direction LR
+    Builder["Client&nbsp;Builder"] --> Client["Jenkins<br/>Async&nbsp;/&nbsp;Blocking"] --> Middleware["Middleware<br/><sub>retry • crumbs • custom</sub>"] --> Endpoint["Typed&nbsp;Endpoint<br/>structs"]
+  end
+
+%% ── External ──────────────────────────
+  subgraph J["Jenkins&nbsp;Master"]
+    direction TB
+    API["REST&nbsp;API"]
+  end
+
+%% ── Flows ─────────────────────────────
+  CLI --> Builder
+  Endpoint --> API
+
+%% ── Styling ───────────────────────────
+  classDef app     fill:#e3f2fd,stroke:#1976d2,stroke-width:1px;
+  classDef sdk     fill:#e8f5e9,stroke:#388e3c,stroke-width:1px;
+  classDef server  fill:#fff8e1,stroke:#f57f17,stroke-width:1px;
+
+  class CLI app;
+  class Builder,Client,Middleware,Endpoint sdk;
+  class API server;
+```
+
+</details>
+
+## 🚀 Supported API Matrix
+
+| Category | Description                             | Method | Path                               | Status |
+|----------|-----------------------------------------|--------|------------------------------------|--------|
+| Job      | Retrieve jobs information               | `GET`  | `/api/json`                        | ✅      |
+| Job      | Fetch job details                       | `GET`  | `/job/:name/api/json`              | ✅      |
+| Job      | Fetch last-build information            | `GET`  | `/job/:name/lastBuild/api/json`    | ✅      |
+| Job      | Fetch console logs                      | `GET`  | `/job/:name/:id/consoleText`       | ✅      |
+| Job      | Fetch last-build console log            | `GET`  | `/job/:name/lastBuild/consoleText` | ✅      |
+| Job      | Trigger builds with parameters          | `POST` | `/job/:name/buildWithParameters`   | ✅      |
+| Job      | Stop ongoing builds                     | `POST` | `/job/:name/:id/stop`              | ✅      |
+| Queue    | Retrieve build queue details            | `GET`  | `/queue/api/json`                  | ✅      |
+| Executor | Retrieve executor statistics and status | `GET`  | `/computer/api/json`               | ✅      |
 
 ## 📥 Installation
 
-Add this dependency to your `Cargo.toml`:
+```shell
+# quickest
+cargo add jenkins-sdk
+```
 
 ```toml
+# Cargo.toml — async client (default)
 [dependencies]
 jenkins-sdk = "0.1"
+
+# blocking client
+# jenkins-sdk = { version = "0.1", default-features = false, features = ["blocking-client"] }
 ```
 
 ## ⚡Quick Start
@@ -123,6 +173,10 @@ fn main() -> Result<(), jenkins_sdk::core::JenkinsError> {
     Ok(())
 }
 ```
+
+## 📜 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## 📃 License
 
