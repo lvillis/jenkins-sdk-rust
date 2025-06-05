@@ -2,12 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.10] - 2025-06-05
+
+### ⚙️ Miscellaneous Tasks
+
+- Update .gitignore
+- *(docs)* Update README
+
 ## [0.1.9] - 2025-06-05
 
 ### 🚀 Features
 
 - Add new endpoints for fetching the job details,the last build information,the console log of the last build
 - Add JobDetail, LastBuildInfo & LastBuildConsole endpoints
+
+### ⚙️ Miscellaneous Tasks
+
+- Release jenkins-sdk version 0.1.9
 
 ## [0.1.8] - 2025-05-26
 
