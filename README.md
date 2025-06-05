@@ -44,10 +44,10 @@ value, and offers a chainable builder with ready-made middleware such as **autom
 
 - **Job Management**
     - [x] Retrieve jobs information
-    - [x] Fetch the job details
-    - [x] Fetch the last build information
+    - [x] Fetch job details
+    - [x] Fetch last-build information
     - [x] Fetch console logs
-    - [x] Fetch the console log of the last build
+    - [x] Fetch last-build console log
     - [x] Trigger builds with parameters
     - [x] Stop ongoing builds
 

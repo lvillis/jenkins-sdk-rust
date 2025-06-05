@@ -52,10 +52,9 @@ impl Endpoint for JobsInfo {
     }
 }
 
-/// GET /job/<name>/api/json
-pub struct JobInfo<'a>(pub &'a str);
-
-impl<'a> Endpoint for JobInfo<'a> {
+/// GET /job/<name>/api/json  
+pub struct JobDetail<'a>(pub &'a str);
+impl<'a> Endpoint for JobDetail<'a> {
     type Output = Value;
     fn method(&self) -> Method {
         Method::GET
@@ -65,30 +64,25 @@ impl<'a> Endpoint for JobInfo<'a> {
     }
 }
 
-
-/// GET /job/<name>/lastBuild/api/json
-pub struct LastBuild<'a>(pub &'a str);
-
-impl<'a> Endpoint for LastBuild<'a> {
+/// GET /job/<name>/lastBuild/api/json  
+pub struct LastBuildInfo<'a>(pub &'a str);
+impl<'a> Endpoint for LastBuildInfo<'a> {
     type Output = Value;
     fn method(&self) -> Method {
         Method::GET
     }
-
     fn path(&self) -> Cow<'static, str> {
         Cow::Owned(format!("job/{}/lastBuild/api/json", self.0))
     }
 }
 
-pub struct LastBuildContext<'a>(pub &'a str);
-
 /// GET /job/<name>/lastBuild/consoleText
-impl<'a> Endpoint for LastBuildContext<'a> {
+pub struct LastBuildConsole<'a>(pub &'a str);
+impl<'a> Endpoint for LastBuildConsole<'a> {
     type Output = String;
     fn method(&self) -> Method {
         Method::GET
     }
-
     fn path(&self) -> Cow<'static, str> {
         Cow::Owned(format!("job/{}/lastBuild/consoleText", self.0))
     }
