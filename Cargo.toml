@@ -1,6 +1,6 @@
 [package]
 name = "jenkins-sdk"
-description = "📦 Jenkins API SDK written in Rust"
+description = "📦 Jenkins API SDK in pure Rust — async and blocking clients, typed endpoints, pluggable middleware & zero magic strings."
 version = "0.1.10"
 edition = "2024"
 license = "MIT"
