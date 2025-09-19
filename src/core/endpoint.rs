@@ -1,20 +1,24 @@
 //! Type-safe endpoint definitions.
 
+use crate::core::JenkinsError;
 use http::Method;
 use serde::de::DeserializeOwned;
+use serde_json::Value;
 use std::borrow::Cow;
 
 /// Common trait implemented by every Jenkins API endpoint.
 pub trait Endpoint {
     type Output: DeserializeOwned + Send + 'static;
+
     fn method(&self) -> Method;
     fn path(&self) -> Cow<'static, str>;
     fn params(&self) -> Option<Vec<(Cow<'static, str>, Cow<'static, str>)>> {
         None
     }
+    fn parse(&self, body: String) -> Result<Self::Output, JenkinsError> {
+        Ok(serde_json::from_str(&body)?)
+    }
 }
-
-use serde_json::Value;
 
 /// GET /queue/api/json
 pub struct QueueLength;
@@ -52,7 +56,7 @@ impl Endpoint for JobsInfo {
     }
 }
 
-/// GET /job/<name>/api/json  
+/// GET /job/<name>/api/json
 pub struct JobDetail<'a>(pub &'a str);
 impl<'a> Endpoint for JobDetail<'a> {
     type Output = Value;
@@ -64,7 +68,7 @@ impl<'a> Endpoint for JobDetail<'a> {
     }
 }
 
-/// GET /job/<name>/lastBuild/api/json  
+/// GET /job/<name>/lastBuild/api/json
 pub struct LastBuildInfo<'a>(pub &'a str);
 impl<'a> Endpoint for LastBuildInfo<'a> {
     type Output = Value;
@@ -86,6 +90,9 @@ impl<'a> Endpoint for LastBuildConsole<'a> {
     fn path(&self) -> Cow<'static, str> {
         Cow::Owned(format!("job/{}/lastBuild/consoleText", self.0))
     }
+    fn parse(&self, body: String) -> Result<Self::Output, JenkinsError> {
+        Ok(body)
+    }
 }
 
 /// GET /job/<name>/<build>/consoleText
@@ -97,6 +104,9 @@ impl<'a> Endpoint for ConsoleText<'a> {
     }
     fn path(&self) -> Cow<'static, str> {
         Cow::Owned(format!("job/{}/{}/consoleText", self.0, self.1))
+    }
+    fn parse(&self, body: String) -> Result<Self::Output, JenkinsError> {
+        Ok(body)
     }
 }
 
@@ -117,13 +127,17 @@ impl<'a> Endpoint for TriggerBuild<'a> {
         self.params.as_object().map(|m| {
             m.iter()
                 .map(|(k, v)| {
-                    (
-                        Cow::Owned(k.clone()),
-                        Cow::Owned(v.as_str().unwrap_or("").to_owned()),
-                    )
+                    let value = v
+                        .as_str()
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_else(|| v.to_string());
+                    (Cow::Owned(k.clone()), Cow::Owned(value))
                 })
                 .collect()
         })
+    }
+    fn parse(&self, body: String) -> Result<Self::Output, JenkinsError> {
+        Ok(body)
     }
 }
 
@@ -144,5 +158,45 @@ impl<'a> Endpoint for StopBuild<'a> {
 
     fn path(&self) -> Cow<'static, str> {
         Cow::Owned(format!("job/{}/{}/stop", self.job, self.build))
+    }
+    fn parse(&self, body: String) -> Result<Self::Output, JenkinsError> {
+        Ok(body)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn trigger_build_params_convert_non_string_values() {
+        let payload = json!({
+            "number": 42,
+            "flag": true,
+            "text": "alpha",
+        });
+        let endpoint = TriggerBuild {
+            job: "core",
+            params: &payload,
+        };
+
+        let params = endpoint.params().unwrap();
+        let mut collected = BTreeMap::new();
+        for (k, v) in params {
+            collected.insert(k.into_owned(), v.into_owned());
+        }
+
+        assert_eq!(collected.get("number"), Some(&"42".to_string()));
+        assert_eq!(collected.get("flag"), Some(&"true".to_string()));
+        assert_eq!(collected.get("text"), Some(&"alpha".to_string()));
+    }
+
+    #[test]
+    fn console_text_parse_returns_body() {
+        let endpoint = ConsoleText("core", "1");
+        let body = String::from("logs");
+        let parsed = endpoint.parse(body.clone()).unwrap();
+        assert_eq!(parsed, body);
     }
 }
