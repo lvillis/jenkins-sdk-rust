@@ -1,6 +1,6 @@
 [package]
 name = "jenkins-sdk"
-description = "📦 Jenkins API SDK in pure Rust — async and blocking clients, typed endpoints, pluggable middleware & zero magic strings."
+description = "Jenkins API SDK in pure Rust with async and blocking clients, typed endpoints, pluggable middleware, and zero magic strings."
 version = "0.1.10"
 edition = "2024"
 license = "MIT"
@@ -8,7 +8,6 @@ authors = ["lvillis<lvillis@outlook.com>"]
 repository = "https://github.com/lvillis/jenkins-sdk-rust"
 homepage = "https://github.com/lvillis/jenkins-sdk-rust"
 documentation = "https://github.com/lvillis/jenkins-sdk-rust#readme"
-
 exclude = [
     "/docs/",
     "/tests/",
@@ -19,7 +18,6 @@ exclude = [
     "/.gitignore",
     "/.aiignore"
 ]
-
 
 [features]
 default = ["async-client"]
@@ -43,6 +41,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 
 [dev-dependencies]
 anyhow = { version = "1.0.98" }
+wiremock = { version = "0.6" }
 
 [[example]]
 name = "async_test"
