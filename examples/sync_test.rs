@@ -8,7 +8,7 @@
 #![cfg(feature = "blocking-client")]
 
 use jenkins_sdk::{
-    JenkinsBlocking,
+    JenkinsBlocking, StopBuild,
     core::{
         ConsoleText, ExecutorsInfo, ExecutorsInfoEndpoint, JobsInfo, QueueLength, TriggerBuild,
     },
@@ -21,10 +21,10 @@ fn main() -> anyhow::Result<()> {
     let client = JenkinsBlocking::builder("https://jenkins.example.com")
         .auth_basic("user", "apitoken")
         .no_system_proxy()
-        .with_retry(2, Duration::from_millis(200))
-        .with_crumb(Duration::from_secs(1_800))
         .timeout(Duration::from_secs(20))
-        .build();
+        .with_retry(2, Duration::from_millis(200))
+        .with_crumb(Duration::from_secs(1_800))?
+        .build()?;
 
     // 2) queue length
     let queue: serde_json::Value = client.request(&QueueLength)?;
@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     println!("Queue length: {items}");
 
     // 3) executors
-    let mut exec: jenkins_sdk::core::ExecutorsInfo = client.request(&ExecutorsInfoEndpoint)?;
+    let mut exec: ExecutorsInfo = client.request(&ExecutorsInfoEndpoint)?;
     exec = exec.calc_idle();
     println!(
         "Executors -> total: {}, busy: {}, idle: {}",
@@ -42,11 +42,11 @@ fn main() -> anyhow::Result<()> {
     // 4) job list
     let jobs: serde_json::Value = client.request(&JobsInfo)?;
     println!("First three jobs:");
-    for j in jobs["jobs"].as_array().unwrap().iter().take(3) {
-        println!("  • {}", j["name"]);
+    for job in jobs["jobs"].as_array().unwrap().iter().take(3) {
+        println!("  - {}", job["name"]);
     }
 
-    // 5) console text of build #42
+    // 5) console text of build #91
     let log: String = client.request(&ConsoleText("core", "91"))?;
     println!("Last 120 chars:\n{}", &log[log.len().saturating_sub(120)..]);
 

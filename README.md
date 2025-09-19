@@ -132,8 +132,8 @@ async fn main() -> Result<(), jenkins_sdk::core::JenkinsError> {
         .auth_basic("user", "apitoken")
         .no_system_proxy()
         .with_retry(3, Duration::from_millis(300))
-        .with_crumb(Duration::from_secs(1800))
-        .build();
+        .with_crumb(Duration::from_secs(1800))?
+        .build()?;
 
     // Queue length
     let q: serde_json::Value = j.request(&QueueLength).await?;
@@ -166,7 +166,7 @@ fn main() -> Result<(), jenkins_sdk::core::JenkinsError> {
         .auth_basic("user", "apitoken")
         .timeout(Duration::from_secs(15))
         .with_retry(2, Duration::from_millis(250))
-        .build();
+        .build()?;
 
     let q: serde_json::Value = j.request(&QueueLength)?;
     println!("queue items = {}", q["items"].as_array().unwrap().len());

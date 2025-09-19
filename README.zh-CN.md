@@ -131,8 +131,8 @@ async fn main() -> anyhow::Result<()> {
         .auth_basic("user", "apitoken")
         .no_system_proxy()
         .with_retry(3, Duration::from_millis(300))
-        .with_crumb(Duration::from_secs(1800))
-        .build();
+        .with_crumb(Duration::from_secs(1800))?
+        .build()?;
 
     // 队列长度
     let q: serde_json::Value = jenkins.request(&QueueLength).await?;
@@ -159,7 +159,7 @@ fn main() -> anyhow::Result<()> {
         .auth_basic("user", "apitoken")
         .timeout(Duration::from_secs(15))
         .with_retry(2, Duration::from_millis(250))
-        .build();
+        .build()?;
 
     let q: serde_json::Value = jenkins.request(&QueueLength)?;
     println!("队列条目数 = {}", q["items"].as_array().unwrap().len());

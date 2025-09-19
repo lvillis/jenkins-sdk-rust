@@ -18,8 +18,8 @@ async fn main() -> anyhow::Result<()> {
         .auth_basic("user", "apitoken")
         .no_system_proxy()
         .with_retry(3, Duration::from_millis(200))
-        .with_crumb(Duration::from_secs(1800))
-        .build();
+        .with_crumb(Duration::from_secs(1800))?
+        .build()?;
 
     // 2) queue length
     let queue: serde_json::Value = client.request(&QueueLength).await?;
@@ -37,11 +37,11 @@ async fn main() -> anyhow::Result<()> {
     // 4) job list
     let jobs: serde_json::Value = client.request(&JobsInfo).await?;
     println!("First three jobs:");
-    for j in jobs["jobs"].as_array().unwrap().iter().take(3) {
-        println!("  • {}", j["name"]);
+    for job in jobs["jobs"].as_array().unwrap().iter().take(3) {
+        println!("  - {}", job["name"]);
     }
 
-    // 5) console text of build #42
+    // 5) console text of build #91
     let log: String = client.request(&ConsoleText("core", "91")).await?;
     println!("Last 120 chars:\n{}", &log[log.len().saturating_sub(120)..]);
 
