@@ -1,7 +1,7 @@
 [package]
 name = "jenkins-sdk"
 description = "Jenkins API SDK in pure Rust with async and blocking clients, typed endpoints, pluggable middleware, and zero magic strings."
-version = "0.1.10"
+version = "0.1.11"
 edition = "2024"
 license = "MIT"
 authors = ["lvillis<lvillis@outlook.com>"]
