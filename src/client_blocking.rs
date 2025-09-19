@@ -2,7 +2,7 @@
 
 use crate::{
     core::{Endpoint, JenkinsError},
-    middleware::{Crumb, Retry},
+    middleware::{CrumbBlocking, RetryBlocking},
     transport::blocking_impl::{BlockingTransport, DefaultBlockingTransport},
 };
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
@@ -98,7 +98,11 @@ impl<T: BlockingTransport> JenkinsBlockingBuilder<T> {
     }
 
     /* sugar layers */
-    pub fn with_retry(self, max: usize, backoff: Duration) -> JenkinsBlockingBuilder<Retry<T>> {
+    pub fn with_retry(
+        self,
+        max: usize,
+        backoff: Duration,
+    ) -> JenkinsBlockingBuilder<RetryBlocking<T>> {
         let JenkinsBlockingBuilder {
             base_url,
             auth,
@@ -114,11 +118,11 @@ impl<T: BlockingTransport> JenkinsBlockingBuilder<T> {
             insecure,
             timeout,
             no_proxy,
-            transport: Retry::new(transport, max, backoff),
+            transport: RetryBlocking::new(transport, max, backoff),
         }
     }
 
-    pub fn with_crumb(self, ttl: Duration) -> JenkinsBlockingBuilder<Crumb<T>> {
+    pub fn with_crumb(self, ttl: Duration) -> JenkinsBlockingBuilder<CrumbBlocking<T>> {
         let JenkinsBlockingBuilder {
             base_url,
             auth,
@@ -136,7 +140,7 @@ impl<T: BlockingTransport> JenkinsBlockingBuilder<T> {
             insecure,
             timeout,
             no_proxy,
-            transport: Crumb::new(transport, base_url_url, auth, ttl),
+            transport: CrumbBlocking::new(transport, base_url_url, auth, ttl, timeout),
         }
     }
 

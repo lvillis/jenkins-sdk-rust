@@ -2,7 +2,7 @@
 
 use crate::{
     core::{Endpoint, JenkinsError},
-    middleware::{Crumb, Retry},
+    middleware::{CrumbAsync, RetryAsync},
     transport::async_impl::{AsyncTransport, DefaultAsyncTransport},
 };
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
@@ -99,7 +99,7 @@ impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
     }
 
     /* sugar layers */
-    pub fn with_retry(self, max: usize, backoff: Duration) -> JenkinsAsyncBuilder<Retry<T>> {
+    pub fn with_retry(self, max: usize, backoff: Duration) -> JenkinsAsyncBuilder<RetryAsync<T>> {
         let JenkinsAsyncBuilder {
             base_url,
             auth,
@@ -115,11 +115,11 @@ impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
             insecure,
             timeout,
             no_proxy,
-            transport: Retry::new(transport, max, backoff),
+            transport: RetryAsync::new(transport, max, backoff),
         }
     }
 
-    pub fn with_crumb(self, ttl: Duration) -> JenkinsAsyncBuilder<Crumb<T>> {
+    pub fn with_crumb(self, ttl: Duration) -> JenkinsAsyncBuilder<CrumbAsync<T>> {
         let JenkinsAsyncBuilder {
             base_url,
             auth,
@@ -137,7 +137,7 @@ impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
             insecure,
             timeout,
             no_proxy,
-            transport: Crumb::new(transport, base_url_url, auth, ttl),
+            transport: CrumbAsync::new(transport, base_url_url, auth, ttl, timeout),
         }
     }
 

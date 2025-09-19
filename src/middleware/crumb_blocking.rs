@@ -31,6 +31,7 @@ pub struct CrumbBlocking<T> {
     base_url: Url,
     auth_basic: Option<(String, String)>,
     ttl: Duration,
+    fetch_timeout: Duration,
     cache: Arc<Mutex<Option<CachedCrumb>>>,
 }
 
@@ -40,12 +41,14 @@ impl<T: BlockingTransport> CrumbBlocking<T> {
         base_url: Url,
         auth_basic: Option<(String, String)>,
         ttl: Duration,
+        fetch_timeout: Duration,
     ) -> Self {
         Self {
             inner,
             base_url,
             auth_basic,
             ttl,
+            fetch_timeout,
             cache: Arc::new(Mutex::new(None)),
         }
     }
@@ -65,14 +68,9 @@ impl<T: BlockingTransport> CrumbBlocking<T> {
             );
         }
 
-        let (code, body) = self.inner.send(
-            Method::GET,
-            url,
-            hdrs,
-            vec![],
-            vec![],
-            Duration::from_secs(30),
-        )?;
+        let (code, body) =
+            self.inner
+                .send(Method::GET, url, hdrs, vec![], vec![], self.fetch_timeout)?;
 
         if !code.is_success() {
             return Err(JenkinsError::Http {

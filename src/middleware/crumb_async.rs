@@ -2,7 +2,7 @@
 //
 //! * Lazily fetches `/crumbIssuer/api/json` on the **first** non-GET request.
 //! * Caches the crumb header for `ttl`; subsequent POST/PUT reuse it.
-//! * Thread-safe via `Arc<RwLock<…>>`.
+//! * Thread-safe via `Arc<RwLock<ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦>>`.
 
 use crate::{core::error::JenkinsError, transport::async_impl::AsyncTransport};
 use async_trait::async_trait;
@@ -39,6 +39,7 @@ pub struct CrumbAsync<T> {
     base_url: Url,
     auth_basic: Option<(String, String)>,
     ttl: Duration,
+    fetch_timeout: Duration,
     cache: Arc<RwLock<Option<CachedCrumb>>>,
 }
 
@@ -49,12 +50,14 @@ impl<T: AsyncTransport> CrumbAsync<T> {
         base_url: Url,
         auth_basic: Option<(String, String)>,
         ttl: Duration,
+        fetch_timeout: Duration,
     ) -> Self {
         Self {
             inner,
             base_url,
             auth_basic,
             ttl,
+            fetch_timeout,
             cache: Arc::new(RwLock::new(None)),
         }
     }
@@ -77,14 +80,7 @@ impl<T: AsyncTransport> CrumbAsync<T> {
 
         let (code, body) = self
             .inner
-            .send(
-                Method::GET,
-                url,
-                hdrs,
-                vec![],
-                vec![],
-                Duration::from_secs(30),
-            )
+            .send(Method::GET, url, hdrs, vec![], vec![], self.fetch_timeout)
             .await?;
 
         if !code.is_success() {
