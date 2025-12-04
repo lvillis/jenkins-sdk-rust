@@ -192,7 +192,18 @@ impl<T: AsyncTransport> JenkinsAsync<T> {
         };
         let (query, form) = (Self::own_pairs(query_raw), Self::own_pairs(form_raw));
 
-        let url = self.base.join(&ep.path())?;
+        let mut url = self.base.clone();
+        {
+            let mut url_path = url
+                .path_segments_mut()
+                .expect("Base URL should not be a cannot-be-a-base URL");
+
+            for p in ep.path().split('/') {
+                url_path.push(p);
+            }
+        }
+        let url = url;
+
         let (status, body) = self
             .transport
             .send(ep.method(), url.clone(), headers, query, form, self.timeout)

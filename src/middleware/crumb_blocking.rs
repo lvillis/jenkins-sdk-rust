@@ -54,7 +54,18 @@ impl<T: BlockingTransport> CrumbBlocking<T> {
     }
 
     fn fetch_crumb(&self) -> Result<CachedCrumb, JenkinsError> {
-        let url = self.base_url.join("crumbIssuer/api/json")?;
+        let mut url = self.base_url.clone();
+        {
+            let mut url_path = url
+                .path_segments_mut()
+                .expect("Base URL should not be a cannot-be-a-base URL");
+
+            url_path.push("crumbIssuer");
+            url_path.push("api");
+            url_path.push("json");
+        }
+        let url = url;
+
         let url_for_error = url.clone();
 
         let mut hdrs = HashMap::new();
