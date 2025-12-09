@@ -1,3 +1,8 @@
+## [0.1.12] - 2025-12-09
+
+### 🐛 Bug Fixes
+
+- Normalize Jenkins base URLs
 ## [0.1.11] - 2025-09-19
 
 ### 🐛 Bug Fixes
@@ -23,6 +28,7 @@
 - Add .editorconfig
 - Add .gitattributes
 - Update description
+- Release jenkins-sdk version 0.1.11
 ## [0.1.10] - 2025-06-05
 
 ### ⚙️ Miscellaneous Tasks
