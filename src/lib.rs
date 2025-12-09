@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)] // JenkinsError carries URL/method/body context; returning it by value is intentional.
+
 // compile-time guard: choose **exactly one** client kind.
 #[cfg(not(any(feature = "async-client", feature = "blocking-client")))]
 compile_error!("You must enable `async-client` (default) or `blocking-client`.");
