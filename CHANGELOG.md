@@ -3,6 +3,10 @@
 ### 🐛 Bug Fixes
 
 - Normalize Jenkins base URLs
+
+### ⚙️ Miscellaneous Tasks
+
+- Release jenkins-sdk version 0.1.12
 ## [0.1.11] - 2025-09-19
 
 ### 🐛 Bug Fixes
