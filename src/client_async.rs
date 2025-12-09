@@ -10,6 +10,15 @@ use http::Method;
 use std::{borrow::Cow, collections::HashMap, time::Duration};
 use url::Url;
 
+fn normalize_base_url(raw: &str) -> Result<Url, JenkinsError> {
+    let mut url = Url::parse(raw)?;
+    let path = url.path().to_string();
+    if path != "/" && !path.ends_with('/') {
+        url.set_path(&(path + "/"));
+    }
+    Ok(url)
+}
+
 /// Configures and constructs [`JenkinsAsync`].
 pub struct JenkinsAsyncBuilder<T = DefaultAsyncTransport> {
     base_url: String,
@@ -124,7 +133,7 @@ impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
             transport,
         } = self;
 
-        let base_url_url = Url::parse(&base_url)?;
+        let base_url_url = normalize_base_url(&base_url)?;
         let crumb_auth = auth.clone();
 
         Ok(JenkinsAsyncBuilder {
@@ -139,7 +148,7 @@ impl<T: AsyncTransport> JenkinsAsyncBuilder<T> {
 
     /// Finalise configuration and build the client.
     pub fn build(self) -> Result<JenkinsAsync<T>, JenkinsError> {
-        let base = Url::parse(&self.base_url)?;
+        let base = normalize_base_url(&self.base_url)?;
         Ok(JenkinsAsync {
             base,
             auth: self.auth,
@@ -217,7 +226,11 @@ mod tests {
     use crate::core::{ConsoleText, QueueLength};
     use async_trait::async_trait;
     use http::{Method, StatusCode};
-    use std::{collections::HashMap, time::Duration};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
     use url::Url;
 
     #[derive(Clone)]
@@ -250,6 +263,39 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct CapturingTransport {
+        status: StatusCode,
+        body: String,
+        last_url: Arc<Mutex<Option<Url>>>,
+    }
+
+    impl CapturingTransport {
+        fn new(status: StatusCode, body: impl Into<String>) -> Self {
+            Self {
+                status,
+                body: body.into(),
+                last_url: Arc::new(Mutex::new(None)),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl AsyncTransport for CapturingTransport {
+        async fn send(
+            &self,
+            _method: Method,
+            url: Url,
+            _headers: HashMap<String, String>,
+            _query: Vec<(String, String)>,
+            _form: Vec<(String, String)>,
+            _timeout: Duration,
+        ) -> Result<(StatusCode, String), JenkinsError> {
+            *self.last_url.lock().unwrap() = Some(url.clone());
+            Ok((self.status, self.body.clone()))
+        }
+    }
+
     #[test]
     fn build_rejects_invalid_url() {
         let result = JenkinsAsync::builder("not a url").build();
@@ -276,5 +322,21 @@ mod tests {
 
         let json = client.request(&QueueLength).await.unwrap();
         assert!(json["items"].is_array());
+    }
+
+    #[tokio::test]
+    async fn request_respects_base_path_without_trailing_slash() {
+        let transport = CapturingTransport::new(StatusCode::OK, "{}");
+        let last_url = transport.last_url.clone();
+
+        let client = JenkinsAsync::builder("https://example.com/jenkins")
+            .transport(transport)
+            .build()
+            .unwrap();
+
+        let _ = client.request(&QueueLength).await.unwrap();
+
+        let url = last_url.lock().unwrap().clone().unwrap();
+        assert_eq!(url.as_str(), "https://example.com/jenkins/queue/api/json");
     }
 }

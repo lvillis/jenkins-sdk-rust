@@ -10,6 +10,15 @@ use http::Method;
 use std::{borrow::Cow, collections::HashMap, time::Duration};
 use url::Url;
 
+fn normalize_base_url(raw: &str) -> Result<Url, JenkinsError> {
+    let mut url = Url::parse(raw)?;
+    let path = url.path().to_string();
+    if path != "/" && !path.ends_with('/') {
+        url.set_path(&(path + "/"));
+    }
+    Ok(url)
+}
+
 /// Configures and constructs [`JenkinsBlocking`].
 pub struct JenkinsBlockingBuilder<T = DefaultBlockingTransport> {
     base_url: String,
@@ -128,7 +137,7 @@ impl<T: BlockingTransport> JenkinsBlockingBuilder<T> {
             transport,
         } = self;
 
-        let base_url_url = Url::parse(&base_url)?;
+        let base_url_url = normalize_base_url(&base_url)?;
         let crumb_auth = auth.clone();
 
         Ok(JenkinsBlockingBuilder {
@@ -143,7 +152,7 @@ impl<T: BlockingTransport> JenkinsBlockingBuilder<T> {
 
     /// Finalise configuration and build the client.
     pub fn build(self) -> Result<JenkinsBlocking<T>, JenkinsError> {
-        let base = Url::parse(&self.base_url)?;
+        let base = normalize_base_url(&self.base_url)?;
         Ok(JenkinsBlocking {
             base,
             auth: self.auth,
@@ -218,7 +227,11 @@ mod tests {
     use super::*;
     use crate::core::{ConsoleText, QueueLength};
     use http::{Method, StatusCode};
-    use std::{collections::HashMap, time::Duration};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
     use url::Url;
 
     #[derive(Clone)]
@@ -250,6 +263,38 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct CapturingTransport {
+        status: StatusCode,
+        body: String,
+        last_url: Arc<Mutex<Option<Url>>>,
+    }
+
+    impl CapturingTransport {
+        fn new(status: StatusCode, body: impl Into<String>) -> Self {
+            Self {
+                status,
+                body: body.into(),
+                last_url: Arc::new(Mutex::new(None)),
+            }
+        }
+    }
+
+    impl BlockingTransport for CapturingTransport {
+        fn send(
+            &self,
+            _method: Method,
+            url: Url,
+            _headers: HashMap<String, String>,
+            _query: Vec<(String, String)>,
+            _form: Vec<(String, String)>,
+            _timeout: Duration,
+        ) -> Result<(StatusCode, String), JenkinsError> {
+            *self.last_url.lock().unwrap() = Some(url.clone());
+            Ok((self.status, self.body.clone()))
+        }
+    }
+
     #[test]
     fn build_rejects_invalid_url() {
         let result = JenkinsBlocking::builder("not a url").build();
@@ -276,5 +321,21 @@ mod tests {
 
         let json = client.request(&QueueLength).unwrap();
         assert!(json["items"].is_array());
+    }
+
+    #[test]
+    fn request_respects_base_path_without_trailing_slash() {
+        let transport = CapturingTransport::new(StatusCode::OK, "{}");
+        let last_url = transport.last_url.clone();
+
+        let client = JenkinsBlocking::builder("https://example.com/jenkins")
+            .transport(transport)
+            .build()
+            .unwrap();
+
+        let _ = client.request(&QueueLength).unwrap();
+
+        let url = last_url.lock().unwrap().clone().unwrap();
+        assert_eq!(url.as_str(), "https://example.com/jenkins/queue/api/json");
     }
 }

@@ -118,6 +118,8 @@ jenkins-sdk = "0.1"
 
 ## ⚡Quick Start
 
+> Base URL can include a sub-path (e.g. `https://example.com/jenkins`); a trailing `/` is optional, the SDK normalises it for you.
+
 ### Async Example
 
 ```rust

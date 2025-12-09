@@ -117,6 +117,8 @@ jenkins-sdk = "0.1"
 
 ## ⚡快速开始
 
+> Jenkins 基础地址可以带子路径（如 `https://example.com/jenkins`），尾部 `/` 可省略，SDK 会自动补齐并正常拼接 API 路径。
+
 ### 异步示例
 
 ```rust
