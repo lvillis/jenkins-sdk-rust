@@ -1,3 +1,8 @@
+## [0.1.13] - 2025-12-09
+
+### ⚙️ Miscellaneous Tasks
+
+- Release jenkins-sdk version 0.1.13
 ## [0.1.12] - 2025-12-09
 
 ### 🐛 Bug Fixes
