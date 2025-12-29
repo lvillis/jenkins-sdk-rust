@@ -2,7 +2,7 @@
 //
 //! * Lazily fetches `/crumbIssuer/api/json` on the **first** non-GET request.
 //! * Caches the crumb header for `ttl`; subsequent POST/PUT reuse it.
-//! * Thread-safe via `Arc<RwLock<ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦>>`.
+//! * Thread-safe via `Arc<RwLock<Option<_>>>`.
 
 use crate::{core::error::JenkinsError, transport::async_impl::AsyncTransport};
 use async_trait::async_trait;
@@ -87,8 +87,8 @@ impl<T: AsyncTransport> CrumbAsync<T> {
             return Err(JenkinsError::Http {
                 code,
                 method: Method::GET,
-                url: url_for_error,
-                body,
+                url: Box::new(url_for_error),
+                body: body.into_boxed_str(),
             });
         }
 

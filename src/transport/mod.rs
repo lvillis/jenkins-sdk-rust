@@ -85,16 +85,16 @@ pub mod async_impl {
             }
 
             let resp = req.send().await.map_err(|e| JenkinsError::Reqwest {
-                source: e,
+                source: Box::new(e),
                 method: method.clone(),
-                url: url.clone(),
+                url: Box::new(url.clone()),
             })?;
 
             let code = resp.status();
             let body = resp.text().await.map_err(|e| JenkinsError::Reqwest {
-                source: e,
+                source: Box::new(e),
                 method: method.clone(),
-                url: url.clone(),
+                url: Box::new(url.clone()),
             })?;
             Ok((code, body))
         }
@@ -173,16 +173,16 @@ pub mod blocking_impl {
             }
 
             let resp = req.send().map_err(|e| JenkinsError::Reqwest {
-                source: e,
+                source: Box::new(e),
                 method: method.clone(),
-                url: url.clone(),
+                url: Box::new(url.clone()),
             })?;
 
             let code = resp.status();
             let body = resp.text().map_err(|e| JenkinsError::Reqwest {
-                source: e,
+                source: Box::new(e),
                 method,
-                url,
+                url: Box::new(url),
             })?;
             Ok((code, body))
         }

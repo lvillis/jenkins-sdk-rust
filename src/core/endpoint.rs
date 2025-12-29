@@ -11,7 +11,13 @@ pub trait Endpoint {
     type Output: DeserializeOwned + Send + 'static;
 
     fn method(&self) -> Method;
+    /// Relative API path, without a leading `/`.
+    ///
+    /// Keep the path free of query strings; use [`Endpoint::params`] for query/form fields.
     fn path(&self) -> Cow<'static, str>;
+    /// Query/form parameters.
+    ///
+    /// Parameters are encoded as query string for `GET`, otherwise as form fields.
     fn params(&self) -> Option<Vec<(Cow<'static, str>, Cow<'static, str>)>> {
         None
     }
@@ -52,7 +58,13 @@ impl Endpoint for JobsInfo {
         Method::GET
     }
     fn path(&self) -> Cow<'static, str> {
-        Cow::Borrowed("api/json?tree=jobs[name,url,color]")
+        Cow::Borrowed("api/json")
+    }
+    fn params(&self) -> Option<Vec<(Cow<'static, str>, Cow<'static, str>)>> {
+        Some(vec![(
+            Cow::Borrowed("tree"),
+            Cow::Borrowed("jobs[name,url,color]"),
+        )])
     }
 }
 

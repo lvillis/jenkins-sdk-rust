@@ -1,6 +1,7 @@
 //! High-level asynchronous Jenkins client.
 
 use crate::{
+    core::url::normalize_base_url,
     core::{Endpoint, JenkinsError},
     middleware::{CrumbAsync, RetryAsync},
     transport::async_impl::{AsyncTransport, DefaultAsyncTransport},
@@ -9,15 +10,6 @@ use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use http::Method;
 use std::{borrow::Cow, collections::HashMap, time::Duration};
 use url::Url;
-
-fn normalize_base_url(raw: &str) -> Result<Url, JenkinsError> {
-    let mut url = Url::parse(raw)?;
-    let path = url.path().to_string();
-    if path != "/" && !path.ends_with('/') {
-        url.set_path(&(path + "/"));
-    }
-    Ok(url)
-}
 
 /// Configures and constructs [`JenkinsAsync`].
 pub struct JenkinsAsyncBuilder<T = DefaultAsyncTransport> {
@@ -211,8 +203,8 @@ impl<T: AsyncTransport> JenkinsAsync<T> {
             return Err(JenkinsError::Http {
                 code: status,
                 method: ep.method(),
-                url,
-                body,
+                url: Box::new(url),
+                body: body.into_boxed_str(),
             });
         }
 

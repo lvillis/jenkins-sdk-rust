@@ -8,7 +8,7 @@ use jenkins_sdk::JenkinsBlocking;
 use jenkins_sdk::core::StopBuild;
 use jenkins_sdk::{
     JenkinsAsync,
-    core::{JenkinsError, QueueLength, TriggerBuild},
+    core::{JenkinsError, JobsInfo, QueueLength, TriggerBuild},
 };
 use serde_json::json;
 #[cfg(feature = "blocking-client")]
@@ -16,7 +16,7 @@ use tokio::task;
 use tokio::time::sleep;
 use wiremock::{
     Match, Mock, MockServer, Request, ResponseTemplate,
-    matchers::{body_string_contains, header, method, path},
+    matchers::{body_string_contains, header, method, path, query_param},
 };
 
 #[derive(Clone, Copy)]
@@ -203,6 +203,49 @@ async fn async_client_attaches_crumb_and_basic_auth() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn async_client_supports_base_path_with_crumb() -> Result<()> {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/jenkins/crumbIssuer/api/json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "crumbRequestField": "Jenkins-Crumb",
+            "crumb": "token"
+        })))
+        .expect(1)
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+
+    mock_post_with_auth(
+        &server,
+        "/jenkins/job/demo/buildWithParameters",
+        Some("token"),
+        Some("foo=bar"),
+        ResponseTemplate::new(200).set_body_string("ok"),
+        1,
+    )
+    .await;
+
+    let base_url = format!("{}/jenkins", server.uri());
+    let client = JenkinsAsync::builder(base_url)
+        .auth_basic("user", "token")
+        .with_crumb(Duration::from_secs(300))?
+        .build()?;
+
+    let body = client
+        .request(&TriggerBuild {
+            job: "demo",
+            params: &json!({ "foo": "bar" }),
+        })
+        .await?;
+    assert_eq!(body, "ok");
+
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn async_retry_replays_on_server_errors() -> Result<()> {
     let server = MockServer::start().await;
 
@@ -222,6 +265,30 @@ async fn async_retry_replays_on_server_errors() -> Result<()> {
 
     let response = client.request(&QueueLength).await?;
     assert!(response["items"].is_array());
+
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn async_jobs_info_uses_tree_query_param() -> Result<()> {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/json"))
+        .and(query_param("tree", "jobs[name,url,color]"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "jobs": []
+        })))
+        .expect(1)
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+
+    let client = JenkinsAsync::builder(server.uri()).build()?;
+
+    let jobs: serde_json::Value = client.request(&JobsInfo).await?;
+    assert!(jobs["jobs"].is_array());
 
     server.verify().await;
     Ok(())
@@ -259,6 +326,52 @@ async fn blocking_client_reuses_crumb_with_retry() -> Result<()> {
         let client = JenkinsBlocking::builder(base_url)
             .auth_basic("user", "token")
             .with_retry(3, Duration::from_millis(5))
+            .with_crumb(Duration::from_secs(300))?
+            .build()?;
+
+        let body: String = client.request(&StopBuild {
+            job: "demo",
+            build: "1",
+        })?;
+        assert_eq!(body, "stopped");
+        Ok(())
+    })
+    .await??;
+
+    server.verify().await;
+    Ok(())
+}
+
+#[cfg(feature = "blocking-client")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn blocking_client_supports_base_path_with_crumb() -> Result<()> {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/jenkins/crumbIssuer/api/json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "crumbRequestField": "Jenkins-Crumb",
+            "crumb": "token"
+        })))
+        .expect(1)
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+
+    mock_post_with_auth(
+        &server,
+        "/jenkins/job/demo/1/stop",
+        Some("token"),
+        None,
+        ResponseTemplate::new(200).set_body_string("stopped"),
+        1,
+    )
+    .await;
+
+    let base_url = format!("{}/jenkins", server.uri());
+    task::spawn_blocking(move || -> Result<()> {
+        let client = JenkinsBlocking::builder(base_url)
+            .auth_basic("user", "token")
             .with_crumb(Duration::from_secs(300))?
             .build()?;
 

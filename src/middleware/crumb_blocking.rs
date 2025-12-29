@@ -76,8 +76,8 @@ impl<T: BlockingTransport> CrumbBlocking<T> {
             return Err(JenkinsError::Http {
                 code,
                 method: Method::GET,
-                url: url_for_error,
-                body,
+                url: Box::new(url_for_error),
+                body: body.into_boxed_str(),
             });
         }
 

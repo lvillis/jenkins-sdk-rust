@@ -11,17 +11,17 @@ pub enum JenkinsError {
     Http {
         code: StatusCode,
         method: Method,
-        url: Url,
-        body: String,
+        url: Box<Url>,
+        body: Box<str>,
     },
 
     /// Transport failure (`reqwest`).
     #[error("Transport error during {method} {url}: {source}")]
     Reqwest {
         #[source]
-        source: reqwest::Error,
+        source: Box<reqwest::Error>,
         method: Method,
-        url: Url,
+        url: Box<Url>,
     },
 
     /// URL construction failure.
