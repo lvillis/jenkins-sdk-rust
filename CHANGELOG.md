@@ -1,3 +1,17 @@
+## [0.1.15] - 2025-12-29
+
+### 🚜 Refactor
+
+- *(core)* Tighten URL and error handling
+
+### ⚙️ Miscellaneous Tasks
+
+- *(ci)* Update
+## [0.1.14] - 2025-12-09
+
+### ⚙️ Miscellaneous Tasks
+
+- Release jenkins-sdk version 0.1.14
 ## [0.1.13] - 2025-12-09
 
 ### ⚙️ Miscellaneous Tasks
