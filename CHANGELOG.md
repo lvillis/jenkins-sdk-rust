@@ -1,3 +1,17 @@
+## [0.1.16] - 2026-01-13
+
+### 🐛 Bug Fixes
+
+- Ci
+
+### 🚜 Refactor
+
+- [**breaking**] Restructure crate; add blocking+TLS features; expand Jenkins core APIs
+
+### ⚙️ Miscellaneous Tasks
+
+- *(docs)* Update README.md
+- Update Cargo.toml
 ## [0.1.15] - 2025-12-29
 
 ### 🚜 Refactor
@@ -7,6 +21,7 @@
 ### ⚙️ Miscellaneous Tasks
 
 - *(ci)* Update
+- Release jenkins-sdk version 0.1.15
 ## [0.1.14] - 2025-12-09
 
 ### ⚙️ Miscellaneous Tasks
@@ -107,7 +122,7 @@
 
 ### 🚀 Features
 
-- Redesign SDK with structured endpoints, blocking/async support, and improved Rust idiomatic API
+- Redesign SDK with structured endpoints, sync/async support, and improved Rust idiomatic API
 
 ### ⚙️ Miscellaneous Tasks
 
