@@ -1,192 +1,49 @@
-//! Reqwest-based transport layers.
+//! HTTP transport layers.
 //!
-//! * `ReqwestAsync` / `ReqwestBlocking` respect `no_proxy` flag to ignore
-//!   system proxy environment variables (HTTP_PROXY, HTTPS_PROXY, etc.).
-//! * Both enable cookie-store so that JSESSIONID persists for CSRF crumbs.
+//! * Async transport uses `reqwest`.
+//! * Blocking transport uses `ureq` so `--features blocking` does not pull an async runtime.
+//! * Both enable cookie-store so that `JSESSIONID` persists for CSRF crumbs.
 
-use crate::core::error::JenkinsError;
-use http::{Method, StatusCode};
-use std::{collections::HashMap, time::Duration};
+use http::{HeaderMap, HeaderValue, Method, StatusCode};
+use std::time::Duration;
 use url::Url;
 
-/* ─────────── async client ─────────── */
-#[cfg(feature = "async-client")]
-pub mod async_impl {
-    use super::*;
-    use async_trait::async_trait;
-    use reqwest::Client;
+#[cfg(feature = "metrics")]
+pub(crate) mod metrics;
+pub(crate) mod middleware;
+pub(crate) mod request;
 
-    /// Trait implemented by any async HTTP layer.
-    #[async_trait]
-    pub trait AsyncTransport: Clone + Send + Sync + 'static {
-        async fn send(
-            &self,
-            method: Method,
-            url: Url,
-            headers: HashMap<String, String>,
-            query: Vec<(String, String)>,
-            form: Vec<(String, String)>,
-            timeout: Duration,
-        ) -> Result<(StatusCode, String), JenkinsError>;
-    }
+#[cfg(feature = "async")]
+pub mod async_transport;
+#[cfg(feature = "blocking")]
+pub mod blocking_transport;
 
-    /// Default async transport built on `reqwest`.
-    #[derive(Clone)]
-    pub struct ReqwestAsync {
-        client: Client,
-    }
-
-    impl ReqwestAsync {
-        /// Construct a new transport.
-        ///
-        /// * `insecure` – accept invalid TLS certificates.  
-        /// * `ua` – User-Agent header.  
-        /// * `timeout` – per-request timeout.  
-        /// * `no_proxy` – ignore system proxy environment variables.
-        pub fn new(insecure: bool, ua: &str, timeout: Duration, no_proxy: bool) -> Self {
-            let mut builder = Client::builder()
-                .danger_accept_invalid_certs(insecure)
-                .user_agent(ua)
-                .cookie_store(true)
-                .timeout(timeout);
-
-            if no_proxy {
-                builder = builder.no_proxy();
-            }
-
-            Self {
-                client: builder.build().expect("build reqwest"),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl AsyncTransport for ReqwestAsync {
-        async fn send(
-            &self,
-            method: Method,
-            url: Url,
-            headers: HashMap<String, String>,
-            query: Vec<(String, String)>,
-            form: Vec<(String, String)>,
-            timeout: Duration,
-        ) -> Result<(StatusCode, String), JenkinsError> {
-            let mut req = self
-                .client
-                .request(method.clone(), url.clone())
-                .query(&query)
-                .timeout(timeout);
-
-            for (k, v) in &headers {
-                req = req.header(k, v);
-            }
-            if !form.is_empty() {
-                req = req.form(&form);
-            }
-
-            let resp = req.send().await.map_err(|e| JenkinsError::Reqwest {
-                source: Box::new(e),
-                method: method.clone(),
-                url: Box::new(url.clone()),
-            })?;
-
-            let code = resp.status();
-            let body = resp.text().await.map_err(|e| JenkinsError::Reqwest {
-                source: Box::new(e),
-                method: method.clone(),
-                url: Box::new(url.clone()),
-            })?;
-            Ok((code, body))
-        }
-    }
-
-    pub type DefaultAsyncTransport = ReqwestAsync;
+#[derive(Clone, Debug, Default)]
+pub struct ResponseMeta {
+    pub retries: usize,
 }
 
-/* ─────────── blocking client ─────────── */
-#[cfg(feature = "blocking-client")]
-pub mod blocking_impl {
-    use super::*;
-    use reqwest::blocking::Client;
+#[derive(Clone, Debug)]
+pub struct TransportResponse {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    pub body: Vec<u8>,
+    pub meta: ResponseMeta,
+}
 
-    /// Trait implemented by any blocking HTTP layer.
-    pub trait BlockingTransport: Clone + Send + Sync + 'static {
-        fn send(
-            &self,
-            method: Method,
-            url: Url,
-            headers: HashMap<String, String>,
-            query: Vec<(String, String)>,
-            form: Vec<(String, String)>,
-            timeout: Duration,
-        ) -> Result<(StatusCode, String), JenkinsError>;
-    }
+#[derive(Clone, Debug)]
+pub struct TransportBody {
+    pub bytes: Vec<u8>,
+    pub content_type: Option<HeaderValue>,
+}
 
-    /// Default blocking transport built on `reqwest`.
-    #[derive(Clone)]
-    pub struct ReqwestBlocking {
-        client: Client,
-    }
-
-    impl ReqwestBlocking {
-        /// Construct a new transport.
-        ///
-        /// * See [`async_impl::ReqwestAsync::new`] for parameter meaning.
-        pub fn new(insecure: bool, ua: &str, timeout: Duration, no_proxy: bool) -> Self {
-            let mut builder = Client::builder()
-                .danger_accept_invalid_certs(insecure)
-                .user_agent(ua)
-                .cookie_store(true)
-                .timeout(timeout);
-
-            if no_proxy {
-                builder = builder.no_proxy();
-            }
-
-            Self {
-                client: builder.build().expect("build reqwest"),
-            }
-        }
-    }
-
-    impl BlockingTransport for ReqwestBlocking {
-        fn send(
-            &self,
-            method: Method,
-            url: Url,
-            headers: HashMap<String, String>,
-            query: Vec<(String, String)>,
-            form: Vec<(String, String)>,
-            timeout: Duration,
-        ) -> Result<(StatusCode, String), JenkinsError> {
-            let mut req = self
-                .client
-                .request(method.clone(), url.clone())
-                .query(&query)
-                .timeout(timeout);
-
-            for (k, v) in &headers {
-                req = req.header(k, v);
-            }
-            if !form.is_empty() {
-                req = req.form(&form);
-            }
-
-            let resp = req.send().map_err(|e| JenkinsError::Reqwest {
-                source: Box::new(e),
-                method: method.clone(),
-                url: Box::new(url.clone()),
-            })?;
-
-            let code = resp.status();
-            let body = resp.text().map_err(|e| JenkinsError::Reqwest {
-                source: Box::new(e),
-                method,
-                url: Box::new(url),
-            })?;
-            Ok((code, body))
-        }
-    }
-
-    pub type DefaultBlockingTransport = ReqwestBlocking;
+#[derive(Clone, Debug)]
+pub struct TransportRequest {
+    pub method: Method,
+    pub url: Url,
+    pub headers: HeaderMap,
+    pub query: Vec<(String, String)>,
+    pub form: Vec<(String, String)>,
+    pub body: Option<TransportBody>,
+    pub timeout: Duration,
 }

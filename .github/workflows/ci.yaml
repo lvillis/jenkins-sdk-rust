@@ -15,18 +15,16 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
+          toolchain: 1.92.0
           components: rustfmt, clippy
 
       - name: Cache cargo
@@ -36,7 +34,49 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --features unstable-raw,tracing,metrics -- -D warnings
 
-      - name: Test
-        run: cargo test --workspace --all-features
+      - name: Doc
+        run: cargo doc --workspace --no-deps
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: async-rustls
+            args: --no-default-features --features async,rustls
+          - name: async-native-tls
+            args: --no-default-features --features async,native-tls
+          - name: blocking-rustls
+            args: --no-default-features --features blocking,rustls
+          - name: blocking-native-tls
+            args: --no-default-features --features blocking,native-tls
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install OpenSSL (native-tls)
+        if: contains(matrix.name, 'native-tls')
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Ensure blocking has no tokio dependency
+        if: startsWith(matrix.name, 'blocking')
+        run: |
+          if cargo tree -e normal ${{ matrix.args }} -i tokio | grep -q "tokio v"; then
+            echo "tokio is a normal dependency under blocking"
+            exit 1
+          fi
+
+      - name: Test (${{ matrix.name }})
+        run: cargo test --workspace ${{ matrix.args }}

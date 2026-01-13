@@ -107,7 +107,7 @@
 
 ### 🚀 Features
 
-- Redesign SDK with structured endpoints, sync/async support, and improved Rust idiomatic API
+- Redesign SDK with structured endpoints, blocking/async support, and improved Rust idiomatic API
 
 ### ⚙️ Miscellaneous Tasks
 
