@@ -76,11 +76,11 @@ flowchart LR
   CLI --> Builder
   Service --> API
 %% ── Styling ───────────────────────────
-  classDef app fill: #e3f2fd, stroke: #1976d2, stroke-width: 1px;
-  classDef sdk fill: #e8f5e9, stroke: #388e3c, stroke-width: 1px;
-  classDef server fill: #fff8e1, stroke: #f57f17, stroke-width: 1px;
+  classDef app fill:#e3f2fd,stroke:#1976d2,stroke-width:1px;
+  classDef sdk fill:#e8f5e9,stroke:#388e3c,stroke-width:1px;
+  classDef server fill:#fff8e1,stroke:#f57f17,stroke-width:1px;
   class CLI app;
-  class Builder, Client, Middleware, Service sdk;
+  class Builder,Client,Middleware,Service sdk;
   class API server;
 ```
 
