@@ -48,8 +48,8 @@ async = ["dep:reqwest", "dep:tokio", "dep:async-trait"]
 blocking = ["dep:ureq"]
 
 # TLS backend (choose exactly one)
-rustls = ["dep:rustls", "reqwest/rustls-no-provider", "ureq/rustls"]
-native-tls = ["reqwest/native-tls", "ureq/native-tls"]
+rustls = ["dep:rustls", "reqwest?/rustls-no-provider", "ureq?/rustls"]
+native-tls = ["reqwest?/native-tls", "ureq?/native-tls"]
 
 # Backward-compatible aliases
 async-client = ["async"]
