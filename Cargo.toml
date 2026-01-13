@@ -11,12 +11,13 @@ repository = "https://github.com/lvillis/jenkins-sdk-rust"
 homepage = "https://github.com/lvillis/jenkins-sdk-rust"
 documentation = "https://github.com/lvillis/jenkins-sdk-rust#readme"
 include = [
-    "Cargo.toml",
-    "CHANGELOG.md",
-    "README.md",
-    "README.zh-CN.md",
-    "src/**",
-    "examples/**",
+  "Cargo.toml",
+  "CHANGELOG.md",
+  "README.md",
+  "README.zh-CN.md",
+  "src/**",
+  "examples/**",
+  "tests/**",
 ]
 
 [workspace]
