@@ -1,7 +1,6 @@
 use crate::transport::request::{Request, RequestBody};
-use crate::{Error, UserId};
+use crate::{Error, UserId, UserInfo, WhoAmI};
 use http::HeaderValue;
-use serde_json::Value;
 
 /// Jenkins users (core) APIs.
 #[derive(Clone)]
@@ -20,7 +19,7 @@ impl UsersService {
 #[cfg(feature = "async")]
 impl UsersService {
     /// `GET /user/<id>/api/json`
-    pub async fn get(&self, id: impl Into<UserId>, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn get(&self, id: impl Into<UserId>, tree: Option<&str>) -> Result<UserInfo, Error> {
         let id = id.into();
         let mut req = Request::get(["user", id.as_str(), "api", "json"]);
         if let Some(tree) = tree {
@@ -30,7 +29,7 @@ impl UsersService {
     }
 
     /// `GET /whoAmI/api/json`
-    pub async fn who_am_i(&self) -> Result<Value, Error> {
+    pub async fn who_am_i(&self) -> Result<WhoAmI, Error> {
         self.client
             .send_json(Request::get(["whoAmI", "api", "json"]))
             .await
@@ -79,7 +78,7 @@ impl BlockingUsersService {
 #[cfg(feature = "blocking")]
 impl BlockingUsersService {
     /// `GET /user/<id>/api/json`
-    pub fn get(&self, id: impl Into<UserId>, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn get(&self, id: impl Into<UserId>, tree: Option<&str>) -> Result<UserInfo, Error> {
         let id = id.into();
         let mut req = Request::get(["user", id.as_str(), "api", "json"]);
         if let Some(tree) = tree {
@@ -89,7 +88,7 @@ impl BlockingUsersService {
     }
 
     /// `GET /whoAmI/api/json`
-    pub fn who_am_i(&self) -> Result<Value, Error> {
+    pub fn who_am_i(&self) -> Result<WhoAmI, Error> {
         self.client
             .send_json(Request::get(["whoAmI", "api", "json"]))
     }

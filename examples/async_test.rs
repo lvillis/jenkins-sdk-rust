@@ -18,7 +18,6 @@ async fn main() -> anyhow::Result<()> {
     let trigger = env_bool("JENKINS_TRIGGER");
 
     let mut builder = Client::builder(&base_url)?
-        .no_system_proxy()
         .with_retry(3, Duration::from_millis(200))
         .with_crumb(Duration::from_secs(1800));
 
@@ -29,20 +28,20 @@ async fn main() -> anyhow::Result<()> {
     let client = builder.build()?;
 
     // who am I
-    let me: serde_json::Value = client.system().who_am_i().await?;
+    let me = client.system().who_am_i().await?;
     println!(
         "whoAmI: {}",
-        me.get("fullName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("<unknown>")
+        me.full_name.as_deref().unwrap_or(
+            me.name
+                .as_deref()
+                .or(me.id.as_deref())
+                .unwrap_or("<unknown>"),
+        )
     );
 
     // queue length (cheap tree)
-    let queue: serde_json::Value = client.queue().list(Some("items[id]")).await?;
-    let items = queue
-        .get("items")
-        .and_then(|v| v.as_array())
-        .map_or(0, |a| a.len());
+    let queue = client.queue().list(Some("items[id]")).await?;
+    let items = queue.items.len();
     println!("queue items: {items}");
 
     // executors (typed)
@@ -53,15 +52,11 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // job list
-    let jobs: serde_json::Value = client.jobs().list().await?;
-    if let Some(arr) = jobs.get("jobs").and_then(|v| v.as_array()) {
+    let jobs = client.jobs().list().await?;
+    if !jobs.jobs.is_empty() {
         println!("first three jobs:");
-        for job in arr.iter().take(3) {
-            let name = job
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("<unknown>");
-            println!("  - {name}");
+        for job in jobs.jobs.iter().take(3) {
+            println!("  - {}", job.name);
         }
     }
 

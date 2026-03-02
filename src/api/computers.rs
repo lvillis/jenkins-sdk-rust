@@ -1,7 +1,6 @@
 use crate::transport::request::{Request, RequestBody};
-use crate::{ComputerName, Error, ExecutorsInfo};
+use crate::{ComputerInfo, ComputerList, ComputerName, Error, ExecutorsInfo};
 use http::HeaderValue;
-use serde_json::Value;
 
 /// Jenkins computers/nodes (core) APIs.
 #[derive(Clone)]
@@ -20,7 +19,7 @@ impl ComputersService {
 #[cfg(feature = "async")]
 impl ComputersService {
     /// `GET /computer/api/json`
-    pub async fn list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn list(&self, tree: Option<&str>) -> Result<ComputerList, Error> {
         let mut req = Request::get(["computer", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -71,7 +70,7 @@ impl ComputersService {
         &self,
         name: impl Into<ComputerName>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<ComputerInfo, Error> {
         let name = name.into();
         let mut req = Request::get(["computer", name.as_str(), "api", "json"]);
         if let Some(tree) = tree {
@@ -175,7 +174,7 @@ impl BlockingComputersService {
 #[cfg(feature = "blocking")]
 impl BlockingComputersService {
     /// `GET /computer/api/json`
-    pub fn list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn list(&self, tree: Option<&str>) -> Result<ComputerList, Error> {
         let mut req = Request::get(["computer", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -225,7 +224,7 @@ impl BlockingComputersService {
         &self,
         name: impl Into<ComputerName>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<ComputerInfo, Error> {
         let name = name.into();
         let mut req = Request::get(["computer", name.as_str(), "api", "json"]);
         if let Some(tree) = tree {

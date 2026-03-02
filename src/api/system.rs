@@ -1,7 +1,6 @@
 use crate::transport::request::{Request, RequestBody};
-use crate::{Crumb, Error};
+use crate::{Crumb, Error, SystemPayload, SystemRoot, WhoAmI};
 use http::HeaderValue;
-use serde_json::Value;
 
 /// Jenkins system-level (core) APIs.
 #[derive(Clone)]
@@ -20,7 +19,7 @@ impl SystemService {
 #[cfg(feature = "async")]
 impl SystemService {
     /// `GET /api/json`
-    pub async fn root(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn root(&self, tree: Option<&str>) -> Result<SystemRoot, Error> {
         let mut req = Request::get(["api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -29,21 +28,21 @@ impl SystemService {
     }
 
     /// `GET /overallLoad/api/json`
-    pub async fn overall_load(&self) -> Result<Value, Error> {
+    pub async fn overall_load(&self) -> Result<SystemPayload, Error> {
         self.client
             .send_json(Request::get(["overallLoad", "api", "json"]))
             .await
     }
 
     /// `GET /loadStatistics/api/json`
-    pub async fn load_statistics(&self) -> Result<Value, Error> {
+    pub async fn load_statistics(&self) -> Result<SystemPayload, Error> {
         self.client
             .send_json(Request::get(["loadStatistics", "api", "json"]))
             .await
     }
 
     /// `GET /whoAmI/api/json`
-    pub async fn who_am_i(&self) -> Result<Value, Error> {
+    pub async fn who_am_i(&self) -> Result<WhoAmI, Error> {
         self.client
             .send_json(Request::get(["whoAmI", "api", "json"]))
             .await
@@ -137,7 +136,7 @@ impl BlockingSystemService {
 #[cfg(feature = "blocking")]
 impl BlockingSystemService {
     /// `GET /api/json`
-    pub fn root(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn root(&self, tree: Option<&str>) -> Result<SystemRoot, Error> {
         let mut req = Request::get(["api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -146,19 +145,19 @@ impl BlockingSystemService {
     }
 
     /// `GET /overallLoad/api/json`
-    pub fn overall_load(&self) -> Result<Value, Error> {
+    pub fn overall_load(&self) -> Result<SystemPayload, Error> {
         self.client
             .send_json(Request::get(["overallLoad", "api", "json"]))
     }
 
     /// `GET /loadStatistics/api/json`
-    pub fn load_statistics(&self) -> Result<Value, Error> {
+    pub fn load_statistics(&self) -> Result<SystemPayload, Error> {
         self.client
             .send_json(Request::get(["loadStatistics", "api", "json"]))
     }
 
     /// `GET /whoAmI/api/json`
-    pub fn who_am_i(&self) -> Result<Value, Error> {
+    pub fn who_am_i(&self) -> Result<WhoAmI, Error> {
         self.client
             .send_json(Request::get(["whoAmI", "api", "json"]))
     }

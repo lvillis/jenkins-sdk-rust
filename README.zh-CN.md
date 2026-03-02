@@ -43,7 +43,7 @@
 | **核心 Service** | 通过 `client.jobs()/queue()/system()/...` 访问 Jenkins Core API，无需手写路径。 |
 | **可组合中间件**     | 内置 CSRF Crumb 获取、重试、定制传输等，链式调用自由扩展。               |
 | **无魔法字符串**     | URL 构造、查询/表单编码、错误映射、JSON 解码全由 SDK 处理。             |
-| **纯 Rust，依赖轻** | 基于 `reqwest`+`rustls`，0 C 依赖，体积小巧。                |
+| **默认纯 Rust** | 基于 `reqx`，默认 TLS 为 `rustls`，并可按需切换 `native-tls`。 |
 
 ## 🖼 架构总览
 
@@ -89,13 +89,13 @@ flowchart LR
 
 | Service         | Jenkins Core API                                                                                          | 状态 |
 |----------------|-----------------------------------------------------------------------------------------------------------|----|
-| `system()`     | `/api/json`、`/whoAmI/api/json`、`/crumbIssuer/api/json`、`/overallLoad/api/json`、`/loadStatistics/api/json`、`/jnlpJars/agent.jar`、`/jnlpJars/jenkins-cli.jar`、`/config.xml` get/update、`/quietDown`/`cancelQuietDown`/`reload`/`safeRestart`/`restart`/`exit` | ✅  |
-| `jobs()`       | list/get + lastBuild selectors、build info、`consoleText`、`logText/progressiveText`、artifact download、stop/term/kill/doDelete/toggleLogKeep/submitDescription、`config.xml` get/update、`createItem`(xml)、copy/rename/delete/enable/disable | ✅  |
-| `queue()`      | list/item/cancel                                                                                          | ✅  |
-| `computers()`  | list/computer + typed `executors_info()`、`doCreateItem`(xml)/copy、toggleOffline/doDelete、`config.xml` get/update、connect/disconnect/launchSlaveAgent | ✅  |
-| `views()`      | list/get、createView(xml)、`config.xml` get/update、doDelete/doRename、addJobToView/removeJobFromView | ✅  |
-| `users()`      | `/user/<id>/api/json`、`/whoAmI/api/json`、`config.xml` get/update | ✅  |
-| `people()`     | `/people/api/json`、`/asynchPeople/api/json` | ✅  |
+| `system()`     | 类型化 root/whoAmI/crumb + `/overallLoad/api/json` 与 `/loadStatistics/api/json`、`/jnlpJars/agent.jar`、`/jnlpJars/jenkins-cli.jar`、`/config.xml` get/update、`/quietDown`/`cancelQuietDown`/`reload`/`safeRestart`/`restart`/`exit` | ✅  |
+| `jobs()`       | 类型化 list/get + 类型化 lastBuild selectors/build info、`consoleText`、`logText/progressiveText`、artifact download、stop/term/kill/doDelete/toggleLogKeep/submitDescription、`config.xml` get/update、`createItem`(xml)、copy/rename/delete/enable/disable | ✅  |
+| `queue()`      | 类型化 list/item + cancel                                                                                   | ✅  |
+| `computers()`  | 类型化 list/computer + 类型化 `executors_info()`、`doCreateItem`(xml)/copy、toggleOffline/doDelete、`config.xml` get/update、connect/disconnect/launchSlaveAgent | ✅  |
+| `views()`      | 类型化 list/get、createView(xml)、`config.xml` get/update、doDelete/doRename、addJobToView/removeJobFromView | ✅  |
+| `users()`      | 类型化 `/user/<id>/api/json`、类型化 `/whoAmI/api/json`、`config.xml` get/update | ✅  |
+| `people()`     | 类型化 `/people/api/json`、类型化 `/asynchPeople/api/json` | ✅  |
 
 ## 📥 安装
 
@@ -109,9 +109,15 @@ cargo add jenkins-sdk
 [dependencies]
 jenkins-sdk = "0.1"
 
+# 异步客户端（显式选择 TLS 后端）
+# jenkins-sdk = { version = "0.1", default-features = false, features = ["async-rustls-ring"] }
+# jenkins-sdk = { version = "0.1", default-features = false, features = ["async-rustls-aws-lc-rs"] }
+# jenkins-sdk = { version = "0.1", default-features = false, features = ["async-native-tls"] }
+
 # 同步客户端（TLS 二选一）
-# jenkins-sdk = { version = "0.1", default-features = false, features = ["blocking", "rustls"] }
-# jenkins-sdk = { version = "0.1", default-features = false, features = ["blocking", "native-tls"] }
+# jenkins-sdk = { version = "0.1", default-features = false, features = ["blocking-rustls-ring"] }
+# jenkins-sdk = { version = "0.1", default-features = false, features = ["blocking-rustls-aws-lc-rs"] }
+# jenkins-sdk = { version = "0.1", default-features = false, features = ["blocking-native-tls"] }
 ```
 
 ## ⚡快速开始
@@ -121,7 +127,7 @@ jenkins-sdk = "0.1"
 ### 异步示例
 
 ```rust
-use jenkins_sdk::Client;
+use jenkins_sdk::{Client, TlsRootStore};
 use std::time::Duration;
 
 #[tokio::main]
@@ -129,14 +135,15 @@ async fn main() -> anyhow::Result<()> {
     // 构建客户端
     let jenkins = Client::builder("https://jenkins.example.com")?
         .auth_basic("user", "apitoken")
-        .no_system_proxy()
+        // 可选：显式指定 TLS 根证书策略
+        .tls_root_store(TlsRootStore::BackendDefault)
         .with_retry(3, Duration::from_millis(300))
         .with_crumb(Duration::from_secs(1800))
         .build()?;
 
     // 队列长度
-    let q: serde_json::Value = jenkins.queue().list(None).await?;
-    println!("队列条目数 = {}", q["items"].as_array().map_or(0, |a| a.len()));
+    let q = jenkins.queue().list(None).await?;
+    println!("队列条目数 = {}", q.items.len());
 
     // 执行器状态
     let ex = jenkins.computers().executors_info().await?;
@@ -146,11 +153,16 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
+默认会读取系统代理环境变量（`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`）。
+如需禁用该行为，可调用 `.no_system_proxy()`。
+
 ### 阻塞示例
 
 ```rust
-// 需要: default-features = false, features = ["blocking", "rustls"]
-// 或者: default-features = false, features = ["blocking", "native-tls"]
+// 需要以下三选一:
+// default-features = false, features = ["blocking-rustls-ring"]
+// default-features = false, features = ["blocking-rustls-aws-lc-rs"]
+// default-features = false, features = ["blocking-native-tls"]
 use jenkins_sdk::BlockingClient;
 use std::time::Duration;
 
@@ -161,29 +173,11 @@ fn main() -> anyhow::Result<()> {
         .with_retry(2, Duration::from_millis(250))
         .build()?;
 
-    let q: serde_json::Value = jenkins.queue().list(None)?;
-    println!("队列条目数 = {}", q["items"].as_array().unwrap().len());
+    let q = jenkins.queue().list(None)?;
+    println!("队列条目数 = {}", q.items.len());
 
     Ok(())
 }
-```
-
-### 任意接口（Unstable Raw Request）
-
-启用 `unstable-raw` feature 后，当某个 API endpoint 还没建模时，可使用 `raw::Request` + `execute()`：
-
-```rust
-use jenkins_sdk::Client;
-use jenkins_sdk::raw::Request;
-
-# async fn demo(client: Client) -> Result<(), jenkins_sdk::Error> {
-let resp = client
-    .execute(&Request::get(["api", "json"]).query_pair("tree", "jobs[name]"))
-    .await?;
-let root: serde_json::Value = resp.json()?;
-println!("{root:?}");
-# Ok(())
-# }
 ```
 
 > 注意：在 Tokio runtime 中使用阻塞客户端时，请通过 `tokio::task::spawn_blocking` 或专用线程池调用。

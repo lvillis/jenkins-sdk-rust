@@ -1,10 +1,10 @@
 //! High-level blocking Jenkins client.
 
 use crate::{
-    Auth, BodySnippetConfig, Error, HttpError, RequestHookContext, api,
+    Auth, BodySnippetConfig, Error, HttpError, RequestHookContext, TlsRootStore, api,
     transport::{
         TransportBody, TransportRequest,
-        blocking_transport::{DynBlockingTransport, UreqBlocking},
+        blocking_transport::{DynBlockingTransport, ReqxBlocking},
         middleware::{CrumbBlocking, HookBlocking, RetryBlocking, RetryConfig},
         request::{Request, Response},
     },
@@ -33,12 +33,11 @@ const DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARG
 pub struct BlockingClientBuilder {
     base_url: Url,
     auth: Option<Auth>,
-    insecure: bool,
     user_agent: String,
     timeout: Duration,
     connect_timeout: Duration,
-    read_timeout: Duration,
     no_proxy: bool,
+    tls_root_store: TlsRootStore,
     retry: Option<RetryConfig>,
     crumb: Option<CrumbConfig>,
     default_headers: HeaderMap,
@@ -52,12 +51,11 @@ impl BlockingClientBuilder {
         Ok(Self {
             base_url,
             auth: None,
-            insecure: false,
             user_agent: DEFAULT_USER_AGENT.to_owned(),
             timeout: Duration::from_secs(30),
             connect_timeout: Duration::from_secs(10),
-            read_timeout: Duration::from_secs(30),
             no_proxy: false,
+            tls_root_store: TlsRootStore::BackendDefault,
             retry: None,
             crumb: None,
             default_headers: HeaderMap::new(),
@@ -76,13 +74,15 @@ impl BlockingClientBuilder {
         self
     }
 
+    /// Ignore system proxy environment variables.
     pub fn no_system_proxy(mut self) -> Self {
         self.no_proxy = true;
         self
     }
 
-    pub fn danger_accept_invalid_certs(mut self, yes: bool) -> Self {
-        self.insecure = yes;
+    /// Sets the trust root policy for HTTPS requests.
+    pub fn tls_root_store(mut self, tls_root_store: TlsRootStore) -> Self {
+        self.tls_root_store = tls_root_store;
         self
     }
 
@@ -99,11 +99,6 @@ impl BlockingClientBuilder {
 
     pub fn connect_timeout(mut self, value: Duration) -> Self {
         self.connect_timeout = value;
-        self
-    }
-
-    pub fn read_timeout(mut self, value: Duration) -> Self {
-        self.read_timeout = value;
         self
     }
 
@@ -158,13 +153,13 @@ impl BlockingClientBuilder {
     pub fn build(self) -> Result<BlockingClient, Error> {
         let base = self.base_url;
 
-        let mut transport: DynBlockingTransport = Arc::new(UreqBlocking::try_new(
-            self.insecure,
+        let mut transport: DynBlockingTransport = Arc::new(ReqxBlocking::try_new(
+            base.as_str(),
             &self.user_agent,
             self.timeout,
             self.connect_timeout,
-            self.read_timeout,
             self.no_proxy,
+            self.tls_root_store,
         )?);
 
         if let Some(hook) = self.request_hook {
@@ -297,11 +292,6 @@ impl BlockingClient {
         self.execute_request(&req)
     }
 
-    #[cfg(feature = "unstable-raw")]
-    pub fn execute(&self, req: &Request) -> Result<Response, Error> {
-        self.execute_request(req)
-    }
-
     pub(crate) fn execute_request(&self, req: &Request) -> Result<Response, Error> {
         #[cfg(feature = "metrics")]
         let _inflight = crate::transport::metrics::InFlightGuard::new();
@@ -421,13 +411,10 @@ impl BlockingClient {
             return Err(err);
         }
 
-        let _retries = resp.meta.retries;
         let response = Response {
             status: resp.status,
             headers: resp.headers,
             body: resp.body,
-            #[cfg(feature = "unstable-raw")]
-            retries: _retries,
         };
 
         #[cfg(feature = "metrics")]
@@ -435,7 +422,7 @@ impl BlockingClient {
             &req.method,
             Some(response.status),
             start.elapsed(),
-            _retries,
+            resp.meta.retries,
             None,
         );
 

@@ -13,14 +13,14 @@
 //!     .with_crumb(Duration::from_secs(1800))
 //!     .build()?;
 //!
-//! let q: serde_json::Value = client.queue().list(None).await?;
-//! println!("{q:?}");
+//! let q = client.queue().list(None).await?;
+//! println!("queue items={}", q.items.len());
 //! # Ok(())
 //! # }
 //! ```
 //!
 //! ## Quick start (blocking)
-//! Enable the `blocking` feature:
+//! Enable one blocking transport feature (for example `blocking-rustls-ring`):
 //! ```no_run
 //! # #[cfg(feature = "blocking")]
 //! # fn demo() -> Result<(), jenkins_sdk::Error> {
@@ -32,8 +32,8 @@
 //!     .with_retry(2, Duration::from_millis(200))
 //!     .build()?;
 //!
-//! let q: serde_json::Value = client.queue().list(None)?;
-//! println!("{q:?}");
+//! let q = client.queue().list(None)?;
+//! println!("queue items={}", q.items.len());
 //! # Ok(())
 //! # }
 //! ```
@@ -42,21 +42,65 @@
 #[cfg(not(any(feature = "async", feature = "blocking")))]
 compile_error!("Enable at least one of: `async` (default) or `blocking`.");
 
-// compile-time guard: choose exactly one TLS backend.
+// compile-time guard: async mode requires exactly one async TLS backend.
 #[cfg(all(
-    any(feature = "async", feature = "blocking"),
-    not(any(feature = "rustls", feature = "native-tls"))
+    feature = "async",
+    not(any(
+        feature = "async-rustls-ring",
+        feature = "async-rustls-aws-lc-rs",
+        feature = "async-native-tls"
+    ))
 ))]
-compile_error!("Enable exactly one TLS backend: `rustls` (default) or `native-tls`.");
+compile_error!(
+    "Enable one async TLS backend: `async-rustls-ring` (default), `async-rustls-aws-lc-rs`, or `async-native-tls`."
+);
 
-#[cfg(all(feature = "rustls", feature = "native-tls"))]
-compile_error!("`rustls` and `native-tls` features are mutually exclusive.");
+#[cfg(all(
+    feature = "async",
+    any(
+        all(feature = "async-rustls-ring", feature = "async-rustls-aws-lc-rs"),
+        all(feature = "async-rustls-ring", feature = "async-native-tls"),
+        all(feature = "async-rustls-aws-lc-rs", feature = "async-native-tls")
+    )
+))]
+compile_error!(
+    "Async mode accepts exactly one TLS backend: choose only one of `async-rustls-ring`, `async-rustls-aws-lc-rs`, or `async-native-tls`."
+);
+
+// compile-time guard: blocking mode requires exactly one blocking TLS backend.
+#[cfg(all(
+    feature = "blocking",
+    not(any(
+        feature = "blocking-rustls-ring",
+        feature = "blocking-rustls-aws-lc-rs",
+        feature = "blocking-native-tls"
+    ))
+))]
+compile_error!(
+    "Enable one blocking TLS backend: `blocking-rustls-ring`, `blocking-rustls-aws-lc-rs`, or `blocking-native-tls`."
+);
+
+#[cfg(all(
+    feature = "blocking",
+    any(
+        all(
+            feature = "blocking-rustls-ring",
+            feature = "blocking-rustls-aws-lc-rs"
+        ),
+        all(feature = "blocking-rustls-ring", feature = "blocking-native-tls"),
+        all(feature = "blocking-rustls-aws-lc-rs", feature = "blocking-native-tls")
+    )
+))]
+compile_error!(
+    "Blocking mode accepts exactly one TLS backend: choose only one of `blocking-rustls-ring`, `blocking-rustls-aws-lc-rs`, or `blocking-native-tls`."
+);
 
 pub mod api;
 mod auth;
 mod client;
 mod error;
 mod request_hook;
+mod tls;
 pub mod types;
 
 mod transport;
@@ -75,6 +119,7 @@ pub use api::{
 pub use auth::Auth;
 pub use error::{BodySnippetConfig, Error, ErrorKind, HttpError, Result, TransportErrorKind};
 pub use request_hook::{RequestHook, RequestHookContext};
+pub use tls::TlsRootStore;
 pub use transport::middleware::RetryConfig;
 pub use types::*;
 
@@ -82,9 +127,3 @@ pub use types::*;
 pub use client::{BlockingClient, BlockingClientBuilder};
 #[cfg(feature = "async")]
 pub use client::{Client, ClientBuilder};
-
-/// Escape hatch for advanced users.
-///
-/// This module is behind the `unstable-raw` feature and is not SemVer-stable.
-#[cfg(feature = "unstable-raw")]
-pub mod raw;

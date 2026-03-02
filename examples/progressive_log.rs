@@ -19,9 +19,7 @@ async fn main() -> anyhow::Result<()> {
     let job = env_or("JENKINS_JOB", "core");
     let build = env_or("JENKINS_BUILD", "lastBuild");
 
-    let mut builder = Client::builder(&base_url)?
-        .no_system_proxy()
-        .timeout(Duration::from_secs(30));
+    let mut builder = Client::builder(&base_url)?.timeout(Duration::from_secs(30));
 
     if let (Some(user), Some(token)) = (env_opt("JENKINS_USER"), env_opt("JENKINS_TOKEN")) {
         builder = builder.auth_basic(user, token);

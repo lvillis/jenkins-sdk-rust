@@ -1,10 +1,9 @@
 use crate::transport::request::{Request, RequestBody, Response};
 use crate::{
-    ArtifactPath, BuildNumber, Error, JobName, JobPath, ProgressiveText, QueueItemId,
-    TriggeredBuild,
+    ArtifactPath, BuildInfo, BuildNumber, Error, JobInfo, JobList, JobName, JobPath,
+    ProgressiveText, QueueItemId, TriggeredBuild,
 };
 use http::HeaderValue;
-use serde_json::Value;
 
 fn job_segments(job: &JobPath) -> Vec<String> {
     job.url_segments().map(ToOwned::to_owned).collect()
@@ -80,14 +79,14 @@ impl JobsService {
 #[cfg(feature = "async")]
 impl JobsService {
     /// `GET /api/json?tree=jobs[name,url,color]`
-    pub async fn list(&self) -> Result<Value, Error> {
+    pub async fn list(&self) -> Result<JobList, Error> {
         self.client
             .send_json(Request::get(["api", "json"]).query_pair("tree", "jobs[name,url,color]"))
             .await
     }
 
     /// `GET /job/<name>/api/json`
-    pub async fn get(&self, job: impl Into<JobPath>, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn get(&self, job: impl Into<JobPath>, tree: Option<&str>) -> Result<JobInfo, Error> {
         let job = job.into();
         let mut segments = job_segments(&job);
         segments.extend(["api", "json"].map(str::to_owned));
@@ -104,7 +103,7 @@ impl JobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         let mut segments = job_segments(&job);
         segments.extend(["lastBuild", "api", "json"].map(str::to_owned));
@@ -121,7 +120,7 @@ impl JobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastCompletedBuild", tree))
@@ -133,7 +132,7 @@ impl JobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastSuccessfulBuild", tree))
@@ -145,7 +144,7 @@ impl JobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastFailedBuild", tree))
@@ -157,7 +156,7 @@ impl JobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastStableBuild", tree))
@@ -169,7 +168,7 @@ impl JobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastUnstableBuild", tree))
@@ -181,7 +180,7 @@ impl JobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastUnsuccessfulBuild", tree))
@@ -213,7 +212,7 @@ impl JobsService {
         job: impl Into<JobPath>,
         build: impl Into<BuildNumber>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         let build = build.into();
 
@@ -512,13 +511,13 @@ impl BlockingJobsService {
 #[cfg(feature = "blocking")]
 impl BlockingJobsService {
     /// `GET /api/json?tree=jobs[name,url,color]`
-    pub fn list(&self) -> Result<Value, Error> {
+    pub fn list(&self) -> Result<JobList, Error> {
         self.client
             .send_json(Request::get(["api", "json"]).query_pair("tree", "jobs[name,url,color]"))
     }
 
     /// `GET /job/<name>/api/json`
-    pub fn get(&self, job: impl Into<JobPath>, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn get(&self, job: impl Into<JobPath>, tree: Option<&str>) -> Result<JobInfo, Error> {
         let job = job.into();
         let mut segments = job_segments(&job);
         segments.extend(["api", "json"].map(str::to_owned));
@@ -531,7 +530,11 @@ impl BlockingJobsService {
     }
 
     /// `GET /job/<name>/lastBuild/api/json`
-    pub fn last_build(&self, job: impl Into<JobPath>, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn last_build(
+        &self,
+        job: impl Into<JobPath>,
+        tree: Option<&str>,
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         let mut segments = job_segments(&job);
         segments.extend(["lastBuild", "api", "json"].map(str::to_owned));
@@ -548,7 +551,7 @@ impl BlockingJobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastCompletedBuild", tree))
@@ -559,7 +562,7 @@ impl BlockingJobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastSuccessfulBuild", tree))
@@ -570,7 +573,7 @@ impl BlockingJobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastFailedBuild", tree))
@@ -581,7 +584,7 @@ impl BlockingJobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastStableBuild", tree))
@@ -592,7 +595,7 @@ impl BlockingJobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastUnstableBuild", tree))
@@ -603,7 +606,7 @@ impl BlockingJobsService {
         &self,
         job: impl Into<JobPath>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         self.client
             .send_json(build_selector_request(&job, "lastUnsuccessfulBuild", tree))
@@ -634,7 +637,7 @@ impl BlockingJobsService {
         job: impl Into<JobPath>,
         build: impl Into<BuildNumber>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<BuildInfo, Error> {
         let job = job.into();
         let build = build.into();
 

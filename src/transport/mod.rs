@@ -1,8 +1,8 @@
 //! HTTP transport layers.
 //!
-//! * Async transport uses `reqwest`.
-//! * Blocking transport uses `ureq` so `--features blocking` does not pull an async runtime.
-//! * Both enable cookie-store so that `JSESSIONID` persists for CSRF crumbs.
+//! * Async transport uses `reqx`.
+//! * Blocking transport also uses `reqx`.
+//! * Common request/response types stay transport-agnostic.
 
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use std::time::Duration;

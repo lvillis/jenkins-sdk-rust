@@ -3,7 +3,7 @@ name = "jenkins-sdk"
 description = "Jenkins API SDK in pure Rust with async and blocking clients, typed endpoints, pluggable middleware, and zero magic strings."
 version = "0.1.16"
 edition = "2024"
-rust-version = "1.92.0"
+rust-version = "1.93.0"
 autoexamples = false
 license = "MIT"
 authors = ["lvillis<lvillis@outlook.com>"]
@@ -20,70 +20,48 @@ include = [
   "tests/**",
 ]
 
-[workspace]
-resolver = "3"
-
-[workspace.dependencies]
-anyhow = { version = "1.0.100", default-features = false, features = ["std"] }
-async-trait = { version = "0.1.89", default-features = false }
-base64 = { version = "0.22.1", default-features = false, features = ["std"] }
-http = { version = "1.4.0", default-features = false, features = ["std"] }
-httpdate = { version = "1.0.3", default-features = false }
-metrics = { version = "0.24.3", default-features = false }
-rustls = { version = "0.23.36", default-features = false, features = ["ring", "std", "tls12"] }
-serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
-serde_json = { version = "1.0.149", default-features = false, features = ["std"] }
-thiserror = { version = "2.0.17", default-features = false, features = ["std"] }
-tokio = { version = "1.49.0", default-features = false, features = ["sync", "time"] }
-tracing = { version = "0.1.44", default-features = false, features = ["std"] }
-reqwest = { version = "0.13.1", default-features = false, features = ["cookies", "form", "query"] }
-ureq = { version = "3.1.4", default-features = false, features = ["cookies", "gzip"] }
-url = { version = "2.5.8", default-features = false, features = ["std"] }
-wiremock = { version = "0.6.5", default-features = false }
-
 [features]
-default = ["async", "rustls"]
+default = ["async-rustls-ring"]
 
-# Core modes
-async = ["dep:reqwest", "dep:tokio", "dep:async-trait"]
-blocking = ["dep:ureq"]
+# Core modes (building blocks)
+async = ["dep:reqx", "dep:tokio", "dep:async-trait"]
+blocking = ["dep:reqx"]
 
-# TLS backend (choose exactly one)
-rustls = ["dep:rustls", "reqwest?/rustls-no-provider", "ureq?/rustls"]
-native-tls = ["reqwest?/native-tls", "ureq?/native-tls"]
+# Async matrix (choose exactly one async TLS backend when `async` is enabled)
+async-rustls-ring = ["async", "reqx?/async-tls-rustls-ring"]
+async-rustls-aws-lc-rs = ["async", "reqx?/async-tls-rustls-aws-lc-rs"]
+async-native-tls = ["async", "reqx?/async-tls-native"]
 
-# Backward-compatible aliases
-async-client = ["async"]
-blocking-client = ["blocking"]
+# Blocking matrix (choose exactly one blocking TLS backend when `blocking` is enabled)
+blocking-rustls-ring = ["blocking", "reqx?/blocking-tls-rustls-ring"]
+blocking-rustls-aws-lc-rs = ["blocking", "reqx?/blocking-tls-rustls-aws-lc-rs"]
+blocking-native-tls = ["blocking", "reqx?/blocking-tls-native"]
 
 tracing = ["dep:tracing"]
 metrics = ["dep:metrics"]
-unstable-raw = []
 
 [dependencies]
-base64 = { workspace = true }
-http = { workspace = true }
-httpdate = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true, optional = true }
-url = { workspace = true }
-metrics = { workspace = true, optional = true }
-rustls = { workspace = true, optional = true }
+base64 = { version = "0.22.1", default-features = false, features = ["std"] }
+http = { version = "1.4.0", default-features = false, features = ["std"] }
+httpdate = { version = "1.0.3", default-features = false }
+serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "1.0.149", default-features = false, features = ["std"] }
+thiserror = { version = "2.0.17", default-features = false, features = ["std"] }
+tracing = { version = "0.1.44", default-features = false, features = ["std"], optional = true }
+url = { version = "2.5.8", default-features = false, features = ["std"] }
+metrics = { version = "0.24.3", default-features = false, optional = true }
 
 # async-only deps
-async-trait = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
+async-trait = { version = "0.1.89", default-features = false, optional = true }
+tokio = { version = "1.49.0", default-features = false, features = ["sync", "time"], optional = true }
 
 # HTTP stack
-reqwest = { workspace = true, optional = true }
-ureq = { workspace = true, optional = true }
+reqx = { version = "0.1.22", default-features = false, optional = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
-wiremock = { workspace = true }
+anyhow = { version = "1.0.100", default-features = false, features = ["std"] }
+tokio = { version = "1.49.0", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
+wiremock = { version = "0.6.5", default-features = false }
 
 [[example]]
 name = "async_test"
@@ -103,6 +81,21 @@ required-features = ["async"]
 [[example]]
 name = "artifact_download"
 path = "examples/artifact_download.rs"
+required-features = ["async"]
+
+[[example]]
+name = "request_hook"
+path = "examples/request_hook.rs"
+required-features = ["async"]
+
+[[example]]
+name = "retry_error_handling"
+path = "examples/retry_error_handling.rs"
+required-features = ["async"]
+
+[[example]]
+name = "tls_root_store"
+path = "examples/tls_root_store.rs"
 required-features = ["async"]
 
 [[example]]

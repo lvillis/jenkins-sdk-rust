@@ -1,10 +1,10 @@
 //! High-level asynchronous Jenkins client.
 
 use crate::{
-    Auth, BodySnippetConfig, Error, HttpError, RequestHookContext, api,
+    Auth, BodySnippetConfig, Error, HttpError, RequestHookContext, TlsRootStore, api,
     transport::{
         TransportBody, TransportRequest,
-        async_transport::{DynAsyncTransport, ReqwestAsync},
+        async_transport::{DynAsyncTransport, ReqxAsync},
         middleware::{CrumbAsync, HookAsync, RetryAsync, RetryConfig},
         request::{Request, Response},
     },
@@ -33,11 +33,11 @@ const DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARG
 pub struct ClientBuilder {
     base_url: Url,
     auth: Option<Auth>,
-    insecure: bool,
     user_agent: String,
     timeout: Duration,
     connect_timeout: Duration,
     no_proxy: bool,
+    tls_root_store: TlsRootStore,
     retry: Option<RetryConfig>,
     crumb: Option<CrumbConfig>,
     default_headers: HeaderMap,
@@ -52,11 +52,11 @@ impl ClientBuilder {
         Ok(Self {
             base_url,
             auth: None,
-            insecure: false,
             user_agent: DEFAULT_USER_AGENT.to_owned(),
             timeout: Duration::from_secs(30),
             connect_timeout: Duration::from_secs(10),
             no_proxy: false,
+            tls_root_store: TlsRootStore::BackendDefault,
             retry: None,
             crumb: None,
             default_headers: HeaderMap::new(),
@@ -83,9 +83,9 @@ impl ClientBuilder {
         self
     }
 
-    /// Accept invalid TLS certificates (**dangerous**).
-    pub fn danger_accept_invalid_certs(mut self, yes: bool) -> Self {
-        self.insecure = yes;
+    /// Sets the trust root policy for HTTPS requests.
+    pub fn tls_root_store(mut self, tls_root_store: TlsRootStore) -> Self {
+        self.tls_root_store = tls_root_store;
         self
     }
 
@@ -166,12 +166,13 @@ impl ClientBuilder {
     pub fn build(self) -> Result<Client, Error> {
         let base = self.base_url;
 
-        let mut transport: DynAsyncTransport = Arc::new(ReqwestAsync::try_new(
-            self.insecure,
+        let mut transport: DynAsyncTransport = Arc::new(ReqxAsync::try_new(
+            base.as_str(),
             &self.user_agent,
             self.timeout,
             self.connect_timeout,
             self.no_proxy,
+            self.tls_root_store,
         )?);
 
         if let Some(hook) = self.request_hook {
@@ -304,11 +305,6 @@ impl Client {
         self.execute_request(&req).await
     }
 
-    #[cfg(feature = "unstable-raw")]
-    pub async fn execute(&self, req: &Request) -> Result<Response, Error> {
-        self.execute_request(req).await
-    }
-
     pub(crate) async fn execute_request(&self, req: &Request) -> Result<Response, Error> {
         #[cfg(feature = "metrics")]
         let _inflight = crate::transport::metrics::InFlightGuard::new();
@@ -433,13 +429,10 @@ impl Client {
             return Err(err);
         }
 
-        let _retries = resp.meta.retries;
         let response = Response {
             status: resp.status,
             headers: resp.headers,
             body: resp.body,
-            #[cfg(feature = "unstable-raw")]
-            retries: _retries,
         };
 
         #[cfg(feature = "metrics")]
@@ -447,7 +440,7 @@ impl Client {
             &req.method,
             Some(response.status),
             start.elapsed(),
-            _retries,
+            resp.meta.retries,
             None,
         );
 

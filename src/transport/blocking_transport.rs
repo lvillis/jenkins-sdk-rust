@@ -1,8 +1,15 @@
 use super::{ResponseMeta, TransportRequest, TransportResponse};
-use crate::error::{Error, TransportErrorKind};
-use http::Method;
-use std::{sync::Arc, time::Duration};
-use ureq::Agent;
+use crate::{
+    TlsRootStore,
+    error::{Error, TransportErrorKind},
+    util::proxy_env::load_proxy_env,
+};
+use reqx::{
+    Error as ReqxError, RetryPolicy, StatusPolicy, TransportErrorKind as ReqxTransportErrorKind,
+    blocking::Client,
+};
+use std::sync::Arc;
+use std::time::Duration;
 
 /// Trait implemented by any blocking HTTP layer.
 pub trait BlockingTransport: Send + Sync + 'static {
@@ -17,50 +24,83 @@ impl<T: BlockingTransport + ?Sized> BlockingTransport for Arc<T> {
     }
 }
 
-/// Default blocking transport built on `ureq`.
+/// Default blocking transport built on `reqx`.
 #[derive(Clone)]
-pub struct UreqBlocking {
-    agent: Agent,
+pub struct ReqxBlocking {
+    client: Arc<Client>,
 }
 
-impl UreqBlocking {
+impl ReqxBlocking {
     /// Construct a new transport.
     ///
-    /// * See [`crate::transport::async_transport::ReqwestAsync::try_new`] for parameter meaning.
+    /// * See [`crate::transport::async_transport::ReqxAsync::try_new`] for parameter meaning.
     pub fn try_new(
-        insecure: bool,
+        base_url: &str,
         ua: &str,
         timeout: Duration,
         connect_timeout: Duration,
-        read_timeout: Duration,
-        no_proxy: bool,
+        disable_system_proxy: bool,
+        tls_root_store: TlsRootStore,
     ) -> Result<Self, Error> {
-        let mut builder = Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_global(Some(timeout))
-            .timeout_connect(Some(connect_timeout))
-            .timeout_recv_body(Some(read_timeout))
-            .user_agent(ua);
+        let ua = http::HeaderValue::from_str(ua).map_err(|source| Error::InvalidConfig {
+            message: "invalid User-Agent header value".into(),
+            source: Some(Box::new(source)),
+        })?;
 
-        if no_proxy {
-            builder = builder.proxy(None);
+        let proxy_env = load_proxy_env(base_url, disable_system_proxy)?;
+
+        let mut builder = Client::builder(base_url)
+            .request_timeout(timeout)
+            .connect_timeout(connect_timeout)
+            .retry_policy(RetryPolicy::disabled())
+            .tls_root_store(tls_root_store.into_reqx())
+            .default_header(http::header::USER_AGENT, ua);
+
+        if let Some(proxy_uri) = proxy_env.proxy_uri {
+            builder = builder.http_proxy(proxy_uri);
+            if !proxy_env.no_proxy_rules.is_empty() {
+                builder = builder
+                    .try_no_proxy(&proxy_env.no_proxy_rules)
+                    .map_err(|source| Error::InvalidConfig {
+                        message: "invalid NO_PROXY/no_proxy rule".into(),
+                        source: Some(Box::new(source)),
+                    })?;
+            }
         }
 
-        if insecure {
-            builder = builder.tls_config(
-                ureq::tls::TlsConfig::builder()
-                    .disable_verification(true)
-                    .build(),
-            );
-        }
+        let client = builder.build().map_err(|source| Error::InvalidConfig {
+            message: "failed to build blocking HTTP client".into(),
+            source: Some(Box::new(source)),
+        })?;
 
         Ok(Self {
-            agent: Agent::new_with_config(builder.build()),
+            client: Arc::new(client),
         })
     }
 }
 
-impl BlockingTransport for UreqBlocking {
+fn map_reqx_error(err: ReqxError, method: http::Method, path: Box<str>) -> Error {
+    let kind = match &err {
+        ReqxError::Timeout { .. } | ReqxError::DeadlineExceeded { .. } => {
+            TransportErrorKind::Timeout
+        }
+        ReqxError::Transport {
+            kind: ReqxTransportErrorKind::Dns | ReqxTransportErrorKind::Connect,
+            ..
+        } => TransportErrorKind::Connect,
+        ReqxError::Transport { .. } => TransportErrorKind::Other,
+        _ => TransportErrorKind::Other,
+    };
+
+    Error::Transport {
+        method,
+        path,
+        kind,
+        source: Box::new(err),
+    }
+}
+
+impl BlockingTransport for ReqxBlocking {
     fn send(&self, req: TransportRequest) -> Result<TransportResponse, Error> {
         let TransportRequest {
             method,
@@ -72,195 +112,37 @@ impl BlockingTransport for UreqBlocking {
             timeout,
         } = req;
         let path = url.path().to_string().into_boxed_str();
-        let url = url.as_str();
-        let method_for_error = method.clone();
 
-        let map_err = |err: ureq::Error| {
-            let kind = match &err {
-                ureq::Error::Timeout(_) => TransportErrorKind::Timeout,
-                ureq::Error::HostNotFound | ureq::Error::ConnectionFailed => {
-                    TransportErrorKind::Connect
-                }
-                ureq::Error::Io(io) if io.kind() == std::io::ErrorKind::TimedOut => {
-                    TransportErrorKind::Timeout
-                }
-                ureq::Error::Io(io)
-                    if matches!(
-                        io.kind(),
-                        std::io::ErrorKind::ConnectionRefused
-                            | std::io::ErrorKind::ConnectionReset
-                            | std::io::ErrorKind::ConnectionAborted
-                            | std::io::ErrorKind::NotConnected
-                    ) =>
-                {
-                    TransportErrorKind::Connect
-                }
-                _ => TransportErrorKind::Other,
-            };
+        let mut request = self
+            .client
+            .request(method.clone(), url.as_str().to_owned())
+            .query_pairs(query)
+            .timeout(timeout)
+            .status_policy(StatusPolicy::Response);
 
-            Error::Transport {
-                method: method_for_error.clone(),
-                path: path.clone(),
-                kind,
-                source: Box::new(err),
-            }
-        };
+        for (name, value) in headers.iter() {
+            request = request.header(name.clone(), value.clone());
+        }
 
-        let mut response = match method {
-            Method::GET => {
-                drop(form);
-                drop(body);
-                let mut req = self.agent.get(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                req.config()
-                    .timeout_global(Some(timeout))
-                    .build()
-                    .call()
-                    .map_err(map_err)?
+        if let Some(body) = body {
+            if let Some(content_type) = body.content_type {
+                request = request.header(http::header::CONTENT_TYPE, content_type);
             }
-            Method::DELETE => {
-                drop(form);
-                drop(body);
-                let mut req = self.agent.delete(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                req.config()
-                    .timeout_global(Some(timeout))
-                    .build()
-                    .call()
-                    .map_err(map_err)?
-            }
-            Method::HEAD => {
-                drop(form);
-                drop(body);
-                let mut req = self.agent.head(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                req.config()
-                    .timeout_global(Some(timeout))
-                    .build()
-                    .call()
-                    .map_err(map_err)?
-            }
-            Method::OPTIONS => {
-                drop(form);
-                drop(body);
-                let mut req = self.agent.options(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                req.config()
-                    .timeout_global(Some(timeout))
-                    .build()
-                    .call()
-                    .map_err(map_err)?
-            }
-            Method::CONNECT => {
-                drop(form);
-                drop(body);
-                let mut req = self.agent.connect(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                req.config()
-                    .timeout_global(Some(timeout))
-                    .build()
-                    .call()
-                    .map_err(map_err)?
-            }
-            Method::TRACE => {
-                drop(form);
-                drop(body);
-                let mut req = self.agent.trace(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                req.config()
-                    .timeout_global(Some(timeout))
-                    .build()
-                    .call()
-                    .map_err(map_err)?
-            }
-            Method::POST => {
-                let mut req = self.agent.post(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                let req = req.config().timeout_global(Some(timeout)).build();
-                if let Some(body) = body {
-                    let req = match body.content_type {
-                        Some(content_type) => req.header(http::header::CONTENT_TYPE, content_type),
-                        None => req,
-                    };
-                    req.send(body.bytes).map_err(map_err)?
-                } else if form.is_empty() {
-                    req.send_empty().map_err(map_err)?
-                } else {
-                    req.send_form(form).map_err(map_err)?
-                }
-            }
-            Method::PUT => {
-                let mut req = self.agent.put(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                let req = req.config().timeout_global(Some(timeout)).build();
-                if let Some(body) = body {
-                    let req = match body.content_type {
-                        Some(content_type) => req.header(http::header::CONTENT_TYPE, content_type),
-                        None => req,
-                    };
-                    req.send(body.bytes).map_err(map_err)?
-                } else if form.is_empty() {
-                    req.send_empty().map_err(map_err)?
-                } else {
-                    req.send_form(form).map_err(map_err)?
-                }
-            }
-            Method::PATCH => {
-                let mut req = self.agent.patch(url).query_pairs(query);
-                for (name, value) in headers.iter() {
-                    req = req.header(name, value);
-                }
-                let req = req.config().timeout_global(Some(timeout)).build();
-                if let Some(body) = body {
-                    let req = match body.content_type {
-                        Some(content_type) => req.header(http::header::CONTENT_TYPE, content_type),
-                        None => req,
-                    };
-                    req.send(body.bytes).map_err(map_err)?
-                } else if form.is_empty() {
-                    req.send_empty().map_err(map_err)?
-                } else {
-                    req.send_form(form).map_err(map_err)?
-                }
-            }
-            other => {
-                return Err(Error::InvalidConfig {
-                    message: format!("unsupported HTTP method for blocking client: {other}")
-                        .into_boxed_str(),
-                    source: None,
-                });
-            }
-        };
+            request = request.body(body.bytes);
+        } else if !form.is_empty() {
+            request = request
+                .form(&form)
+                .map_err(|err| map_reqx_error(err, method.clone(), path.clone()))?;
+        }
 
-        let status = response.status();
-        let headers = response.headers().clone();
-        let body = response
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_to_vec()
-            .map_err(map_err)?;
+        let response = request
+            .send()
+            .map_err(|err| map_reqx_error(err, method, path))?;
 
         Ok(TransportResponse {
-            status,
-            headers,
-            body: body.to_vec(),
+            status: response.status(),
+            headers: response.headers().clone(),
+            body: response.body().to_vec(),
             meta: ResponseMeta::default(),
         })
     }

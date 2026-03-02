@@ -24,7 +24,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.1
           components: rustfmt, clippy
 
       - name: Cache cargo
@@ -34,7 +34,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --features unstable-raw,tracing,metrics -- -D warnings
+        run: cargo clippy --workspace --all-targets --features tracing,metrics -- -D warnings
 
       - name: Doc
         run: cargo doc --workspace --no-deps
@@ -45,14 +45,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: async-rustls
-            args: --no-default-features --features async,rustls
+          - name: async-rustls-ring
+            args: --no-default-features --features async-rustls-ring
+          - name: async-rustls-aws-lc-rs
+            args: --no-default-features --features async-rustls-aws-lc-rs
           - name: async-native-tls
-            args: --no-default-features --features async,native-tls
-          - name: blocking-rustls
-            args: --no-default-features --features blocking,rustls
+            args: --no-default-features --features async-native-tls
+          - name: blocking-rustls-ring
+            args: --no-default-features --features blocking-rustls-ring
+          - name: blocking-rustls-aws-lc-rs
+            args: --no-default-features --features blocking-rustls-aws-lc-rs
           - name: blocking-native-tls
-            args: --no-default-features --features blocking,native-tls
+            args: --no-default-features --features blocking-native-tls
 
     steps:
       - uses: actions/checkout@v6
@@ -60,7 +64,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.1
           components: rustfmt, clippy
 
       - name: Cache cargo

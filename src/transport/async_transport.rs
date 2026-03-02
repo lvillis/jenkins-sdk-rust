@@ -1,19 +1,15 @@
 use super::{ResponseMeta, TransportRequest, TransportResponse};
-use crate::error::{Error, TransportErrorKind};
+use crate::{
+    TlsRootStore,
+    error::{Error, TransportErrorKind},
+    util::proxy_env::load_proxy_env,
+};
 use async_trait::async_trait;
-use reqwest::Client;
+use reqx::{
+    Client, Error as ReqxError, RetryPolicy, StatusPolicy,
+    TransportErrorKind as ReqxTransportErrorKind,
+};
 use std::{sync::Arc, time::Duration};
-
-#[cfg(feature = "rustls")]
-fn ensure_rustls_provider() {
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
-}
-
-#[cfg(not(feature = "rustls"))]
-fn ensure_rustls_provider() {}
 
 /// Trait implemented by any async HTTP layer.
 #[async_trait]
@@ -30,51 +26,87 @@ impl<T: AsyncTransport + ?Sized> AsyncTransport for Arc<T> {
     }
 }
 
-/// Default async transport built on `reqwest`.
+/// Default async transport built on `reqx`.
 #[derive(Clone)]
-pub struct ReqwestAsync {
+pub struct ReqxAsync {
     client: Client,
 }
 
-impl ReqwestAsync {
+impl ReqxAsync {
     /// Construct a new transport.
     ///
-    /// * `insecure` – accept invalid TLS certificates.  
-    /// * `ua` – User-Agent header.  
-    /// * `timeout` – per-request timeout.  
+    /// * `base_url` - client base URL used by reqx.
+    /// * `ua` - User-Agent header.
+    /// * `timeout` - per-request timeout.
     /// * `connect_timeout` – connection establishment timeout.
-    /// * `no_proxy` – ignore system proxy environment variables.
+    /// * `disable_system_proxy` - disable system proxy environment variables.
+    /// * `tls_root_store` - trust root selection for TLS.
     pub fn try_new(
-        insecure: bool,
+        base_url: &str,
         ua: &str,
         timeout: Duration,
         connect_timeout: Duration,
-        no_proxy: bool,
+        disable_system_proxy: bool,
+        tls_root_store: TlsRootStore,
     ) -> Result<Self, Error> {
-        ensure_rustls_provider();
+        let ua = http::HeaderValue::from_str(ua).map_err(|source| Error::InvalidConfig {
+            message: "invalid User-Agent header value".into(),
+            source: Some(Box::new(source)),
+        })?;
 
-        let mut builder = Client::builder()
-            .danger_accept_invalid_certs(insecure)
-            .user_agent(ua)
-            .cookie_store(true)
+        let proxy_env = load_proxy_env(base_url, disable_system_proxy)?;
+
+        let mut builder = Client::builder(base_url)
+            .request_timeout(timeout)
             .connect_timeout(connect_timeout)
-            .timeout(timeout);
+            .retry_policy(RetryPolicy::disabled())
+            .tls_root_store(tls_root_store.into_reqx())
+            .default_header(http::header::USER_AGENT, ua);
 
-        if no_proxy {
-            builder = builder.no_proxy();
+        if let Some(proxy_uri) = proxy_env.proxy_uri {
+            builder = builder.http_proxy(proxy_uri);
+            if !proxy_env.no_proxy_rules.is_empty() {
+                builder = builder
+                    .try_no_proxy(&proxy_env.no_proxy_rules)
+                    .map_err(|source| Error::InvalidConfig {
+                        message: "invalid NO_PROXY/no_proxy rule".into(),
+                        source: Some(Box::new(source)),
+                    })?;
+            }
         }
 
-        let client = builder.build().map_err(|err| Error::InvalidConfig {
+        let client = builder.build().map_err(|source| Error::InvalidConfig {
             message: "failed to build async HTTP client".into(),
-            source: Some(Box::new(err)),
+            source: Some(Box::new(source)),
         })?;
 
         Ok(Self { client })
     }
 }
 
+fn map_reqx_error(err: ReqxError, method: http::Method, path: Box<str>) -> Error {
+    let kind = match &err {
+        ReqxError::Timeout { .. } | ReqxError::DeadlineExceeded { .. } => {
+            TransportErrorKind::Timeout
+        }
+        ReqxError::Transport {
+            kind: ReqxTransportErrorKind::Dns | ReqxTransportErrorKind::Connect,
+            ..
+        } => TransportErrorKind::Connect,
+        ReqxError::Transport { .. } => TransportErrorKind::Other,
+        _ => TransportErrorKind::Other,
+    };
+
+    Error::Transport {
+        method,
+        path,
+        kind,
+        source: Box::new(err),
+    }
+}
+
 #[async_trait]
-impl AsyncTransport for ReqwestAsync {
+impl AsyncTransport for ReqxAsync {
     async fn send(&self, req: TransportRequest) -> Result<TransportResponse, Error> {
         let TransportRequest {
             method,
@@ -85,59 +117,38 @@ impl AsyncTransport for ReqwestAsync {
             body,
             timeout,
         } = req;
-        let mut req = self
-            .client
-            .request(method.clone(), url.clone())
-            .query(&query)
-            .timeout(timeout);
+        let path = url.path().to_string().into_boxed_str();
 
-        req = req.headers(headers);
+        let mut request = self
+            .client
+            .request(method.clone(), url.as_str().to_owned())
+            .query_pairs(query)
+            .timeout(timeout)
+            .status_policy(StatusPolicy::Response);
+
+        for (name, value) in headers.iter() {
+            request = request.header(name.clone(), value.clone());
+        }
         if let Some(body) = body {
             if let Some(content_type) = body.content_type {
-                req = req.header(http::header::CONTENT_TYPE, content_type);
+                request = request.header(http::header::CONTENT_TYPE, content_type);
             }
-            req = req.body(body.bytes);
+            request = request.body(body.bytes);
         } else if !form.is_empty() {
-            req = req.form(&form);
+            request = request
+                .form(&form)
+                .map_err(|err| map_reqx_error(err, method.clone(), path.clone()))?;
         }
 
-        let resp = req.send().await.map_err(|e| {
-            let kind = if e.is_timeout() {
-                TransportErrorKind::Timeout
-            } else if e.is_connect() {
-                TransportErrorKind::Connect
-            } else {
-                TransportErrorKind::Other
-            };
-            Error::Transport {
-                method: method.clone(),
-                path: url.path().to_string().into_boxed_str(),
-                kind,
-                source: Box::new(e),
-            }
-        })?;
+        let resp = request
+            .send()
+            .await
+            .map_err(|err| map_reqx_error(err, method, path))?;
 
-        let code = resp.status();
-        let headers = resp.headers().clone();
-        let body = resp.bytes().await.map_err(|e| {
-            let kind = if e.is_timeout() {
-                TransportErrorKind::Timeout
-            } else if e.is_connect() {
-                TransportErrorKind::Connect
-            } else {
-                TransportErrorKind::Other
-            };
-            Error::Transport {
-                method: method.clone(),
-                path: url.path().to_string().into_boxed_str(),
-                kind,
-                source: Box::new(e),
-            }
-        })?;
         Ok(TransportResponse {
-            status: code,
-            headers,
-            body: body.to_vec(),
+            status: resp.status(),
+            headers: resp.headers().clone(),
+            body: resp.body().to_vec(),
             meta: ResponseMeta::default(),
         })
     }

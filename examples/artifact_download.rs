@@ -26,9 +26,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     };
 
-    let mut builder = Client::builder(&base_url)?
-        .no_system_proxy()
-        .timeout(Duration::from_secs(60));
+    let mut builder = Client::builder(&base_url)?.timeout(Duration::from_secs(60));
 
     if let (Some(user), Some(token)) = (env_opt("JENKINS_USER"), env_opt("JENKINS_TOKEN")) {
         builder = builder.auth_basic(user, token);

@@ -1,6 +1,6 @@
 use crate::Error;
+use crate::PeopleList;
 use crate::transport::request::Request;
-use serde_json::Value;
 
 /// Jenkins people APIs (core).
 #[derive(Clone)]
@@ -19,7 +19,7 @@ impl PeopleService {
 #[cfg(feature = "async")]
 impl PeopleService {
     /// `GET /people/api/json`
-    pub async fn list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn list(&self, tree: Option<&str>) -> Result<PeopleList, Error> {
         let mut req = Request::get(["people", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -28,7 +28,7 @@ impl PeopleService {
     }
 
     /// `GET /asynchPeople/api/json`
-    pub async fn asynch_list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn async_list(&self, tree: Option<&str>) -> Result<PeopleList, Error> {
         let mut req = Request::get(["asynchPeople", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -54,7 +54,7 @@ impl BlockingPeopleService {
 #[cfg(feature = "blocking")]
 impl BlockingPeopleService {
     /// `GET /people/api/json`
-    pub fn list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn list(&self, tree: Option<&str>) -> Result<PeopleList, Error> {
         let mut req = Request::get(["people", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -63,7 +63,7 @@ impl BlockingPeopleService {
     }
 
     /// `GET /asynchPeople/api/json`
-    pub fn asynch_list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn async_list(&self, tree: Option<&str>) -> Result<PeopleList, Error> {
         let mut req = Request::get(["asynchPeople", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);

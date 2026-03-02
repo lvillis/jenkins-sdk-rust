@@ -1,6 +1,5 @@
 use crate::transport::request::Request;
-use crate::{Error, QueueItemId};
-use serde_json::Value;
+use crate::{Error, QueueItem, QueueItemId, QueueList};
 
 /// Jenkins queue (core) APIs.
 #[derive(Clone)]
@@ -19,7 +18,7 @@ impl QueueService {
 #[cfg(feature = "async")]
 impl QueueService {
     /// `GET /queue/api/json`
-    pub async fn list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn list(&self, tree: Option<&str>) -> Result<QueueList, Error> {
         let mut req = Request::get(["queue", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -32,7 +31,7 @@ impl QueueService {
         &self,
         id: impl Into<QueueItemId>,
         tree: Option<&str>,
-    ) -> Result<Value, Error> {
+    ) -> Result<QueueItem, Error> {
         let id = id.into();
         let mut req = Request::get(["queue", "item", id.as_str(), "api", "json"]);
         if let Some(tree) = tree {
@@ -66,7 +65,7 @@ impl BlockingQueueService {
 #[cfg(feature = "blocking")]
 impl BlockingQueueService {
     /// `GET /queue/api/json`
-    pub fn list(&self, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn list(&self, tree: Option<&str>) -> Result<QueueList, Error> {
         let mut req = Request::get(["queue", "api", "json"]);
         if let Some(tree) = tree {
             req = req.query_pair("tree", tree);
@@ -75,7 +74,7 @@ impl BlockingQueueService {
     }
 
     /// `GET /queue/item/<id>/api/json`
-    pub fn item(&self, id: impl Into<QueueItemId>, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn item(&self, id: impl Into<QueueItemId>, tree: Option<&str>) -> Result<QueueItem, Error> {
         let id = id.into();
         let mut req = Request::get(["queue", "item", id.as_str(), "api", "json"]);
         if let Some(tree) = tree {

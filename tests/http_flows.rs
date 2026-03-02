@@ -117,6 +117,7 @@ async fn async_client_refreshes_expired_crumb() -> Result<()> {
     .await;
 
     let client = Client::builder(server.uri())?
+        .no_system_proxy()
         .auth_basic("user", "token")
         .with_crumb(Duration::from_millis(0))
         .build()?;
@@ -160,7 +161,7 @@ async fn async_client_propagates_http_error() -> Result<()> {
     )
     .await;
 
-    let client = Client::builder(server.uri())?.build()?;
+    let client = Client::builder(server.uri())?.no_system_proxy().build()?;
 
     let err = client
         .queue()
@@ -203,6 +204,7 @@ async fn async_client_attaches_crumb_and_basic_auth() -> Result<()> {
     .await;
 
     let client = Client::builder(server.uri())?
+        .no_system_proxy()
         .auth_basic("user", "token")
         .with_crumb(Duration::from_secs(300))
         .build()?;
@@ -244,6 +246,7 @@ async fn async_client_supports_base_path_with_crumb() -> Result<()> {
 
     let base_url = format!("{}/jenkins", server.uri());
     let client = Client::builder(base_url)?
+        .no_system_proxy()
         .auth_basic("user", "token")
         .with_crumb(Duration::from_secs(300))
         .build()?;
@@ -277,11 +280,12 @@ async fn async_retry_replays_on_server_errors() -> Result<()> {
     .await;
 
     let client = Client::builder(server.uri())?
+        .no_system_proxy()
         .with_retry(3, Duration::from_millis(5))
         .build()?;
 
     let response = client.queue().list(None).await?;
-    assert!(response["items"].is_array());
+    assert!(response.items.is_empty());
 
     server.verify().await;
     Ok(())
@@ -309,6 +313,7 @@ async fn async_retry_replays_on_rate_limited_with_retry_after() -> Result<()> {
     .await;
 
     let client = Client::builder(server.uri())?
+        .no_system_proxy()
         .retry_config(RetryConfig {
             max_retries: 1,
             base_delay: Duration::ZERO,
@@ -320,7 +325,7 @@ async fn async_retry_replays_on_rate_limited_with_retry_after() -> Result<()> {
         .build()?;
 
     let response = client.queue().list(None).await?;
-    assert!(response["items"].is_array());
+    assert!(response.items.is_empty());
 
     server.verify().await;
     Ok(())
@@ -340,6 +345,7 @@ async fn async_error_body_snippet_redacts_auth_token() -> Result<()> {
     .await;
 
     let client = Client::builder(server.uri())?
+        .no_system_proxy()
         .auth_basic("user", "supersecret")
         .build()?;
 
@@ -378,10 +384,10 @@ async fn async_jobs_info_uses_tree_query_param() -> Result<()> {
         .mount(&server)
         .await;
 
-    let client = Client::builder(server.uri())?.build()?;
+    let client = Client::builder(server.uri())?.no_system_proxy().build()?;
 
-    let jobs: serde_json::Value = client.jobs().list().await?;
-    assert!(jobs["jobs"].is_array());
+    let jobs = client.jobs().list().await?;
+    assert!(jobs.jobs.is_empty());
 
     server.verify().await;
     Ok(())
@@ -406,7 +412,7 @@ async fn async_jobs_progressive_console_text_parses_headers() -> Result<()> {
         .mount(&server)
         .await;
 
-    let client = Client::builder(server.uri())?.build()?;
+    let client = Client::builder(server.uri())?.no_system_proxy().build()?;
 
     let chunk = client
         .jobs()
@@ -433,7 +439,7 @@ async fn async_jobs_download_artifact_splits_path_segments() -> Result<()> {
     )
     .await;
 
-    let client = Client::builder(server.uri())?.build()?;
+    let client = Client::builder(server.uri())?.no_system_proxy().build()?;
 
     let bytes = client
         .jobs()
@@ -465,7 +471,7 @@ async fn async_system_downloads_jnlp_jars() -> Result<()> {
     )
     .await;
 
-    let client = Client::builder(server.uri())?.build()?;
+    let client = Client::builder(server.uri())?.no_system_proxy().build()?;
 
     assert_eq!(client.system().agent_jar().await?, vec![1]);
     assert_eq!(client.system().cli_jar().await?, vec![2]);
@@ -490,7 +496,7 @@ async fn async_computers_create_from_xml_posts_xml() -> Result<()> {
         .mount(&server)
         .await;
 
-    let client = Client::builder(server.uri())?.build()?;
+    let client = Client::builder(server.uri())?.no_system_proxy().build()?;
     client
         .computers()
         .create_from_xml("agent-1", "<slave/>")
@@ -523,7 +529,7 @@ async fn async_users_config_xml_supports_get_and_update() -> Result<()> {
         .mount(&server)
         .await;
 
-    let client = Client::builder(server.uri())?.build()?;
+    let client = Client::builder(server.uri())?.no_system_proxy().build()?;
 
     let xml = client.users().get_config_xml("alice").await?;
     assert_eq!(String::from_utf8_lossy(&xml), "<u/>");
@@ -564,6 +570,7 @@ async fn blocking_client_reuses_crumb_with_retry() -> Result<()> {
     let base_url = server.uri();
     task::spawn_blocking(move || -> Result<()> {
         let client = BlockingClient::builder(base_url)?
+            .no_system_proxy()
             .auth_basic("user", "token")
             .retry_config(RetryConfig {
                 max_retries: 3,
@@ -606,7 +613,9 @@ async fn blocking_jobs_progressive_console_text_parses_headers() -> Result<()> {
 
     let base_url = server.uri();
     task::spawn_blocking(move || -> Result<()> {
-        let client = BlockingClient::builder(base_url)?.build()?;
+        let client = BlockingClient::builder(base_url)?
+            .no_system_proxy()
+            .build()?;
 
         let chunk = client.jobs().progressive_console_text("demo", "1", 0)?;
         assert_eq!(chunk.text, "hello");
@@ -636,7 +645,9 @@ async fn blocking_jobs_download_artifact_splits_path_segments() -> Result<()> {
 
     let base_url = server.uri();
     task::spawn_blocking(move || -> Result<()> {
-        let client = BlockingClient::builder(base_url)?.build()?;
+        let client = BlockingClient::builder(base_url)?
+            .no_system_proxy()
+            .build()?;
 
         let bytes = client.jobs().download_artifact("demo", "1", "a/b c.txt")?;
         assert_eq!(bytes, vec![1, 2, 3]);
@@ -678,6 +689,7 @@ async fn blocking_client_supports_base_path_with_crumb() -> Result<()> {
     let base_url = format!("{}/jenkins", server.uri());
     task::spawn_blocking(move || -> Result<()> {
         let client = BlockingClient::builder(base_url)?
+            .no_system_proxy()
             .auth_basic("user", "token")
             .with_crumb(Duration::from_secs(300))
             .build()?;

@@ -1,7 +1,6 @@
 use crate::transport::request::{Request, RequestBody};
-use crate::{Error, JobPath, ViewName};
+use crate::{Error, JobPath, ViewInfo, ViewList, ViewName};
 use http::HeaderValue;
-use serde_json::Value;
 
 /// Jenkins views (core) APIs.
 #[derive(Clone)]
@@ -20,14 +19,18 @@ impl ViewsService {
 #[cfg(feature = "async")]
 impl ViewsService {
     /// `GET /api/json?tree=views[name,url]`
-    pub async fn list(&self) -> Result<Value, Error> {
+    pub async fn list(&self) -> Result<ViewList, Error> {
         self.client
             .send_json(Request::get(["api", "json"]).query_pair("tree", "views[name,url]"))
             .await
     }
 
     /// `GET /view/<name>/api/json`
-    pub async fn get(&self, name: impl Into<ViewName>, tree: Option<&str>) -> Result<Value, Error> {
+    pub async fn get(
+        &self,
+        name: impl Into<ViewName>,
+        tree: Option<&str>,
+    ) -> Result<ViewInfo, Error> {
         let name = name.into();
         let mut req = Request::get(["view", name.as_str(), "api", "json"]);
         if let Some(tree) = tree {
@@ -142,13 +145,13 @@ impl BlockingViewsService {
 #[cfg(feature = "blocking")]
 impl BlockingViewsService {
     /// `GET /api/json?tree=views[name,url]`
-    pub fn list(&self) -> Result<Value, Error> {
+    pub fn list(&self) -> Result<ViewList, Error> {
         self.client
             .send_json(Request::get(["api", "json"]).query_pair("tree", "views[name,url]"))
     }
 
     /// `GET /view/<name>/api/json`
-    pub fn get(&self, name: impl Into<ViewName>, tree: Option<&str>) -> Result<Value, Error> {
+    pub fn get(&self, name: impl Into<ViewName>, tree: Option<&str>) -> Result<ViewInfo, Error> {
         let name = name.into();
         let mut req = Request::get(["view", name.as_str(), "api", "json"]);
         if let Some(tree) = tree {

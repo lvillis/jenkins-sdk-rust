@@ -2,8 +2,9 @@
 //!
 //! Build with:
 //! ```bash
-//! cargo run --no-default-features --features blocking,rustls --example blocking_test
-//! # or: cargo run --no-default-features --features blocking,native-tls --example blocking_test
+//! cargo run --no-default-features --features blocking-rustls-ring --example blocking_test
+//! # or: cargo run --no-default-features --features blocking-rustls-aws-lc-rs --example blocking_test
+//! # or: cargo run --no-default-features --features blocking-native-tls --example blocking_test
 //! ```
 //!
 //! Set env vars to run against a real Jenkins:
@@ -23,7 +24,6 @@ fn main() -> anyhow::Result<()> {
     let trigger = env_bool("JENKINS_TRIGGER");
 
     let mut builder = BlockingClient::builder(&base_url)?
-        .no_system_proxy()
         .timeout(Duration::from_secs(20))
         .with_retry(2, Duration::from_millis(200))
         .with_crumb(Duration::from_secs(1_800));
@@ -35,20 +35,20 @@ fn main() -> anyhow::Result<()> {
     let client = builder.build()?;
 
     // who am I
-    let me: serde_json::Value = client.system().who_am_i()?;
+    let me = client.system().who_am_i()?;
     println!(
         "whoAmI: {}",
-        me.get("fullName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("<unknown>")
+        me.full_name.as_deref().unwrap_or(
+            me.name
+                .as_deref()
+                .or(me.id.as_deref())
+                .unwrap_or("<unknown>"),
+        )
     );
 
     // queue length (cheap tree)
-    let queue: serde_json::Value = client.queue().list(Some("items[id]"))?;
-    let items = queue
-        .get("items")
-        .and_then(|v| v.as_array())
-        .map_or(0, |a| a.len());
+    let queue = client.queue().list(Some("items[id]"))?;
+    let items = queue.items.len();
     println!("queue items: {items}");
 
     // executors (typed)
@@ -59,15 +59,11 @@ fn main() -> anyhow::Result<()> {
     );
 
     // job list
-    let jobs: serde_json::Value = client.jobs().list()?;
-    if let Some(arr) = jobs.get("jobs").and_then(|v| v.as_array()) {
+    let jobs = client.jobs().list()?;
+    if !jobs.jobs.is_empty() {
         println!("first three jobs:");
-        for job in arr.iter().take(3) {
-            let name = job
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("<unknown>");
-            println!("  - {name}");
+        for job in jobs.jobs.iter().take(3) {
+            println!("  - {}", job.name);
         }
     }
 
